@@ -3,7 +3,7 @@ import time
 from audioop import error
 from time import sleep
 from PyQt5.QtWidgets import QMainWindow, QApplication, QGraphicsScene
-from PyQt5.QtGui import QPixmap,  QImage
+from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import QTimer, Qt
 import sys
 
@@ -62,11 +62,10 @@ class MainWindow(QMainWindow):
     def init_camera(self):
 
         if self.ui.carmera_init.text() == '相机初始化':
-            
 
             camera_flag = False
-            if self.ui.select_cam.currentText() == 'IDS' :
-            # IDS
+            if self.ui.select_cam.currentText() == 'IDS':
+                # IDS
                 try:
                     self.camera = IDS()
                     self.camera.set_pixel_rate(16e7)
@@ -106,7 +105,7 @@ class MainWindow(QMainWindow):
         if self.image_timer is not None:
             self.image_timer.stop()
         if self.ui.init_motion_ctr.text() == '位移台初始化':
-        # self.motion_controller = motion_ctr('192.168.254.254')
+            # self.motion_controller = motion_ctr('192.168.254.254')
             self.motion = self.ui.select_motion.currentText()
             if self.motion == 'smartact':
                 self.motion = smartact()
@@ -131,7 +130,7 @@ class MainWindow(QMainWindow):
                         self.x.append(0)
                     if self.x[-1] != 0:
                         self.y.append(0)
-                    elif i % 2 ==0:
+                    elif i % 2 == 0:
                         self.y.append(self.step)
                     else:
                         self.y.append(-self.step)
@@ -161,18 +160,18 @@ class MainWindow(QMainWindow):
     def image_show(self):
         # while time.time() - a < 20:
         self.scene.clear()
-            # print(self.camera.data)
+        # print(self.camera.data)
         image = self.camera.read_newest_image()
         image = self.crop_image(image)
         self.photon = np.max(image)
         # print(image.shape)
         if self.ui.log.text() == '正常显示':
-            image = (4095 * np.log10(9*image/4095+1)).astype(np.uint16)
+            image = (4095 * np.log10(9 * image / 4095 + 1)).astype(np.uint16)
         # image = image.transpose((2, 0, 1))
         # print(np.max(image), image.shape)
 
         if image.dtype == np.uint16:
-            frame = QImage(image<<4, image.shape[0], image.shape[1], QImage.Format_Grayscale16)
+            frame = QImage(image << 4, image.shape[0], image.shape[1], QImage.Format_Grayscale16)
         elif image.dtype == np.uint8:
             frame = QImage(image, image.shape[0], image.shape[1], QImage.Format_RGB888)
         # frame = frame.scaled(640, 640, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -189,18 +188,17 @@ class MainWindow(QMainWindow):
         image_ = Image.fromarray(image_)
         print(2)
         if name is not None:
-            save_path = os.path.join(self.save_path,f'{name}.png')
+            save_path = os.path.join(self.save_path, f'{name}.png')
         else:
-            save_path = os.path.join(self.save_path,f'{self.cur_point}.png')
+            save_path = os.path.join(self.save_path, f'{self.cur_point}.png')
         print(save_path)
         image_.save(save_path)
-
 
     def crop_image(self, image):
         if image.ndim == 2:
             width, height = image.shape
         else:
-            width, height, _= image.shape
+            width, height, _ = image.shape
 
         x1 = width // 2 - self.xpixel_num // 2 + self.x_offset
         y1 = height // 2 - self.ypixel_num // 2 + self.y_offset
@@ -222,13 +220,13 @@ class MainWindow(QMainWindow):
         distance = self.ui.xmotion.text()
         distance = float(distance)
         # print(type(distance))
-        self.motion.move_by(distance/1000, axis=0)
+        self.motion.move_by(distance / 1000, axis=0)
 
     def set_ymotion(self):
         distance = self.ui.y_motion.text()
         distance = float(distance)
         # print(type(distance))
-        self.motion.move_by(distance/1000, axis=1)
+        self.motion.move_by(distance / 1000, axis=1)
 
     def set_photon(self):
         self.ui.photon.setText(str(self.photon))
@@ -251,12 +249,11 @@ class MainWindow(QMainWindow):
         self.ex_time = float(self.ui.ex_time.text()) / 1000
         self.camera.set_ex_time(self.ex_time)
 
-
     def set_save_path(self):
         self.save_path = self.ui.save_path.text()
 
     def set_step(self):
-        self.step = float(self.ui.step.text())/1000
+        self.step = float(self.ui.step.text()) / 1000
 
     def set_scan_num(self):
         self.scan_num = int(self.ui.scan_num.text())
@@ -272,9 +269,6 @@ class MainWindow(QMainWindow):
             self.image_timer.stop()
             self.frame_period -= 10
             self.image_timer.start(self.frame_period)
-
-
-
 
 
 if __name__ == '__main__':
