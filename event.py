@@ -9,7 +9,7 @@ import sys
 
 from gui_simple import Ui_MainWindow
 from camera import IDS, Basler
-from motion_controller import *
+from motion_controller import xps, smartact
 import numpy as np
 from PIL import Image
 
@@ -106,9 +106,13 @@ class MainWindow(QMainWindow):
             self.image_timer.stop()
         if self.ui.init_motion_ctr.text() == '位移台初始化':
             # self.motion_controller = motion_ctr('192.168.254.254')
-            self.motion = self.ui.select_motion.currentText()
-            if self.motion == 'smartact':
+            motion = self.ui.select_motion.currentText()
+            if motion == 'smartact':
                 self.motion = smartact()
+                self.ui.init_motion_ctr.setText('开始扫描')
+            elif motion == 'newportxps':
+                self.motion = xps()
+                self.motion.init_groups(['Group3', 'Group4'])
                 self.ui.init_motion_ctr.setText('开始扫描')
         elif self.ui.init_motion_ctr.text() == '开始扫描':
             self.ui.init_motion_ctr.setText('终止位移台移动')
@@ -137,16 +141,19 @@ class MainWindow(QMainWindow):
         print(self.x, self.y)
 
     def scan(self):
-        self.image_timer.stop()
-        self.save_image()
-        if self.cur_point == 0:
-            time.sleep(20)
-        self.motion.move_by(self.x[self.cur_point], axis=0)
-        sleep(0.02)
-        self.motion.move_by(self.y[self.cur_point], axis=1)
+        if self.image_timer:
+            self.image_timer.stop()
+        if self.camera:
+            self.save_image()
+        # if self.cur_point == 0:
+        #     time.sleep(20)
+        # for i in range(int(self.scan_num**2)):
+        self.motion.move_by(position=self.x[self.cur_point], axis=0)
+        sleep(0.2)
+        self.motion.move_by(position=self.y[self.cur_point], axis=1)
         self.cur_point = self.cur_point + 1
-
-        QTimer.singleShot(100, self.start_display_next_scan)
+        if self.image_timer:
+            QTimer.singleShot(100, self.start_display_next_scan)
 
     def start_display_next_scan(self):
         self.image_timer.start(self.frame_period)
@@ -220,13 +227,13 @@ class MainWindow(QMainWindow):
         distance = self.ui.xmotion.text()
         distance = float(distance)
         # print(type(distance))
-        self.motion.move_by(distance / 1000, axis=0)
+        self.motion.move_by(distance, axis=0)
 
     def set_ymotion(self):
         distance = self.ui.y_motion.text()
         distance = float(distance)
         # print(type(distance))
-        self.motion.move_by(distance / 1000, axis=1)
+        self.motion.move_by(distance, axis=1)
 
     def set_photon(self):
         self.ui.photon.setText(str(self.photon))
@@ -253,7 +260,7 @@ class MainWindow(QMainWindow):
         self.save_path = self.ui.save_path.text()
 
     def set_step(self):
-        self.step = float(self.ui.step.text()) / 1000
+        self.step = float(self.ui.step.text()) 
 
     def set_scan_num(self):
         self.scan_num = int(self.ui.scan_num.text())
