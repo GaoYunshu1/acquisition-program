@@ -9,7 +9,7 @@ import sys
 
 from gui_simple import Ui_MainWindow
 from camera import IDS, Basler
-from motion_controller import xps, smartact
+from motion_controller import xps, smartact, nators
 import numpy as np
 from PIL import Image
 
@@ -114,6 +114,9 @@ class MainWindow(QMainWindow):
                 self.motion = xps()
                 self.motion.init_groups(['Group3', 'Group4'])
                 self.ui.init_motion_ctr.setText('开始扫描')
+            elif motion == 'nators':
+                self.motion = nators()
+                self.motion.open_system()
         elif self.ui.init_motion_ctr.text() == '开始扫描':
             self.ui.init_motion_ctr.setText('终止位移台移动')
             self.generate_scan_point()

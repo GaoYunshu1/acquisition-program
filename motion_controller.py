@@ -79,6 +79,108 @@ class xps():
                      max_jerktime: int = None):
         self.xps.set_velocity(stage, velocity, acceleration, min_jerktime, max_jerktime)
 
+import ctypes
+from ctypes import create_string_buffer, c_uint
+
+class nators():
+    def __init__(self):
+        dll_path = 'C:/Windows/System32/NTControl.dll'
+        # 加载 DLL
+        try:
+            self.stage_dll = ctypes.CDLL(dll_path)
+            print(f"成功加载 DLL: {dll_path}")
+        except Exception as e:
+            print(f"加载 DLL 时发生错误: {e}")
+            self.stage_dll = None
+        
+        # 定义 C 数据类型
+        self.NT_STATUS = ctypes.c_int
+        self.NT_INDEX = ctypes.c_uint
+
+        # 设置 NT_GotoPositionRelative_S 函数的参数类型
+        if self.stage_dll:
+            self.stage_dll.NT_GotoPositionRelative_S.argtypes = [
+                self.NT_INDEX,  # systemIndex
+                self.NT_INDEX,  # channelIndex
+                ctypes.c_int  # diff
+            ]
+
+            self.stage_dll.NT_GotoPositionRelative_S.restype = self.NT_STATUS
+
+        self.system_index = None
+
+    def open_system(self, system_locator='usb:id:0685782677', options="sync"):
+        """打开系统并返回系统索引"""
+        try:
+            system_index = self.NT_INDEX(0)
+            options_encoded = options.encode('utf-8')
+
+            result = self.stage_dll.NT_OpenSystem(
+                ctypes.byref(system_index), 
+                system_locator.encode('utf-8'), 
+                options_encoded
+            )
+
+            if result == 0:  
+                self.system_index = system_index.value
+                print(f"成功连接到系统: {system_locator}")
+                return self.system_index
+            else:
+                print(f"Error: Failed to open system, result code {result}")
+                return None
+        except Exception as e:
+            print(f"在打开系统时发生错误: {e}")
+            return None
+    def close_system(self):
+        try:
+            result = self.stage_dll.NT_CloseSystem(self.NT_INDEX(self.system_index))
+            if result == 0:
+                self.system_index = None
+            return result
+        except Exception as e:
+            print(f"在关闭系统时发生错误: {e}")
+            return None
+
+    def call_nt_find_systems(self, options=""):
+        """查找可用系统并返回系统定位符列表"""
+        try:
+            options_encoded = options.encode('utf-8')
+
+            out_buffer_size = 4096 
+            out_buffer = create_string_buffer(out_buffer_size)
+
+            io_buffer_size = c_uint(out_buffer_size)
+
+            result = self.stage_dll.NT_FindSystems(options_encoded, out_buffer, ctypes.byref(io_buffer_size))
+
+            actual_size = io_buffer_size.value
+
+            result_data = out_buffer.raw[:actual_size]  
+            print(f"成功找到系统: {result_data}")
+            return result_data
+        except Exception as e:
+            print(f"查找系统时发生错误: {e}")
+            return None
+
+    def move_by(self, channel_index, diff_mm):
+        ''' input:diff(mm) 
+            channel(正放): 2 垂直方向 1 水平方向 0 前后方向 '''
+        try:
+            if self.system_index is None:
+                print("系统未打开，无法移动")
+                return
+
+            diff_nanometers = int(diff_mm * 1e6)
+
+            result = self.stage_dll.NT_GotoPositionRelative_S(self.system_index, channel_index, ctypes.c_int(diff_nanometers))
+
+            if result == 0: 
+                print(f"成功将通道 {channel_index} 移动 {diff_mm} 毫米")
+            else:
+                print(f"错误: 无法移动通道 {channel_index}，错误代码: {result}")
+        except Exception as e:
+            print(f"移动定位台时发生错误: {e}")
+
 
 if __name__ == "__main__":
     a = xps()

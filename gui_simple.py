@@ -320,6 +320,6 @@ class Ui_MainWindow(object):
         self.label_16.setText(_translate("MainWindow", "位移台"))
         self.select_motion.setItemText(0, _translate("MainWindow", "newportxps"))
         self.select_motion.setItemText(1, _translate("MainWindow", "smartact"))
-        self.select_motion.setItemText(2, _translate("MainWindow", "test1"))
+        self.select_motion.setItemText(2, _translate("MainWindow", "nators"))
         self.select_motion.setItemText(3, _translate("MainWindow", "test2"))
         self.select_motion.setItemText(4, _translate("MainWindow", "test3"))
