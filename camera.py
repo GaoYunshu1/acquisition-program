@@ -5,12 +5,39 @@ from PyQt5 import QtGui
 from PyQt5.QtGui import QImage, QImageReader
 import numpy as np
 from pylablib.devices import uc480
+from abc import ABC, abstractmethod
 
 
-class IDS:
+class Camera(ABC):
+    def __init__(self):
+        super().__init__()
+
+    @abstractmethod
+    def set_ex_time(self, ex_time):
+        """设置曝光时间, ex_time : S"""
+        pass
+
+    @abstractmethod
+    def start_acquisition(self):
+        """开始图像采集"""
+        pass
+
+    @abstractmethod
+    def read_newest_image(self):
+        """读取最新的图像"""
+        pass
+
+    @abstractmethod
+    def get_frame_period(self):
+        """获取帧率"""
+        pass
+
+
+class IDS(Camera):
     def __init__(self):
 
         # self.cam = uc480.UC480Camera(backend='ueye')
+        super().__init__()
         print((uc480.list_cameras(backend='ueye')))
         # print(uc480.UC480Camera.get_all_color_modes())
         cam_id = uc480.list_cameras(backend='ueye')[0][0]
@@ -56,16 +83,18 @@ class IDS:
             if image is None:
                 self.wait_for_frame(1)
                 image = self.cam.read_newest_image()
+                return image
         except Exception as e:
             print(f'IDS获取图像失败：{e}')
-        return image
+
 
     def get_frame_period(self):
         return self.cam.get_frame_period()
 
 
-class Basler:
+class Basler(Camera):
     def __init__(self):
+        super().__init__()
         global pylon
         from pypylon import pylon
         # 创建相机对象并连接到第一个可用的相机

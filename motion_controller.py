@@ -131,6 +131,7 @@ class nators():
         except Exception as e:
             print(f"在打开系统时发生错误: {e}")
             return None
+
     def close_system(self):
         try:
             result = self.stage_dll.NT_CloseSystem(self.NT_INDEX(self.system_index))
@@ -162,22 +163,24 @@ class nators():
             print(f"查找系统时发生错误: {e}")
             return None
 
-    def move_by(self, channel_index, diff_mm):
-        ''' input:diff(mm) 
-            channel(正放): 2 垂直方向 1 水平方向 0 前后方向 '''
+    def move_by(self, distance, axis):
+        """ input:distance(mm)
+            channel(正放): 2 垂直方向 1 水平方向 0 前后方向 """
+
+        channel = [1, 2, 0]
         try:
             if self.system_index is None:
                 print("系统未打开，无法移动")
                 return
 
-            diff_nanometers = int(diff_mm * 1e6)
+            diff_nanometers = int(distance * 1e6)
 
-            result = self.stage_dll.NT_GotoPositionRelative_S(self.system_index, channel_index, ctypes.c_int(diff_nanometers))
+            result = self.stage_dll.NT_GotoPositionRelative_S(self.system_index, channel[axis], ctypes.c_int(diff_nanometers))
 
             if result == 0: 
-                print(f"成功将通道 {channel_index} 移动 {diff_mm} 毫米")
+                print(f"成功将通道 {channel[axis]} 移动 {distance} 毫米")
             else:
-                print(f"错误: 无法移动通道 {channel_index}，错误代码: {result}")
+                print(f"错误: 无法移动通道 {channel[axis]}，错误代码: {result}")
         except Exception as e:
             print(f"移动定位台时发生错误: {e}")
 

@@ -109,14 +109,15 @@ class MainWindow(QMainWindow):
             motion = self.ui.select_motion.currentText()
             if motion == 'smartact':
                 self.motion = smartact()
-                self.ui.init_motion_ctr.setText('开始扫描')
+
             elif motion == 'newportxps':
                 self.motion = xps()
                 self.motion.init_groups(['Group3', 'Group4'])
-                self.ui.init_motion_ctr.setText('开始扫描')
+
             elif motion == 'nators':
                 self.motion = nators()
                 self.motion.open_system()
+            self.ui.init_motion_ctr.setText('开始扫描')
         elif self.ui.init_motion_ctr.text() == '开始扫描':
             self.ui.init_motion_ctr.setText('终止位移台移动')
             self.generate_scan_point()
@@ -144,16 +145,16 @@ class MainWindow(QMainWindow):
         print(self.x, self.y)
 
     def scan(self):
-        if self.image_timer:
-            self.image_timer.stop()
+        # if self.image_timer:
+        #     self.image_timer.stop()
         if self.camera:
             self.save_image()
         # if self.cur_point == 0:
         #     time.sleep(20)
         # for i in range(int(self.scan_num**2)):
-        self.motion.move_by(position=self.x[self.cur_point], axis=0)
+        self.motion.move_by(self.x[self.cur_point], axis=0)
         sleep(0.2)
-        self.motion.move_by(position=self.y[self.cur_point], axis=1)
+        self.motion.move_by(self.y[self.cur_point], axis=1)
         self.cur_point = self.cur_point + 1
         if self.image_timer:
             QTimer.singleShot(100, self.start_display_next_scan)
