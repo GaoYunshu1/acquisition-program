@@ -9,6 +9,8 @@ import sys
 
 from gui_simple import Ui_MainWindow
 from camera import IDS, Basler
+from VSY import VSyCamera as vsy
+from VSY import VsyGvspPixelType
 from motion_controller import xps, smartact, nators
 import numpy as np
 from PIL import Image
@@ -34,6 +36,7 @@ class MainWindow(QMainWindow):
         self.xmotion = None
         self.y_motion = None
         self.motion = None
+        self.pixel_type = None
         self.scene = QGraphicsScene()  # 创建画布
         self.ui.image.setScene(self.scene)  # 把画布添加到窗口
         self.image_timer = None
@@ -71,24 +74,35 @@ class MainWindow(QMainWindow):
                     self.camera.set_pixel_rate(16e7)
                     self.camera.start_acquisition()
                     self.camera.wait_for_frame(2)
+                    self.pixel_type = 'mono12'
                     camera_flag = True
                 except Exception as e:
                     print(f'启动IDS失败:{e}')
             # print(4)
-            if self.ui.select_cam.currentText() == 'Basler':
+            elif self.ui.select_cam.currentText() == 'Basler':
                 try:
                     self.camera = Basler()
                     self.camera.set_image_format('Mono12p')
+                    self.pixel_type = 'mono12'
                     camera_flag = True
                 except Exception as e:
                     print(f'启动Basler失败:{e}')
+
+            elif self.ui.select_cam.currentText() == 'VSY':
+                try:
+                    self.camera = vsy()
+                    self.camera.set_pixel_format(VsyGvspPixelType.PixelType_Gvsp_Mono16)
+                    self.pixel_type = 'mono16'
+                    camera_flag = True
+                except Exception as e:
+                    print(f'启动VSY失败:{e}')
 
             if camera_flag:
                 self.camera.start_acquisition()
 
                 # self.camera.set_frame_rate()
                 self.frame_period = self.camera.get_frame_period()
-                self.frame_period = int(self.frame_period * 2000)
+                self.frame_period = int(self.frame_period * 1000) # VSY有问题，只能读最旧图像，必须同步刷新
                 print(self.frame_period)
                 self.image_timer = QTimer(self)
                 self.image_timer.timeout.connect(self.image_show)
@@ -190,8 +204,10 @@ class MainWindow(QMainWindow):
         # image = image.transpose((2, 0, 1))
         # print(np.max(image), image.shape)
 
-        if image.dtype == np.uint16:
+        if self.pixel_type == 'mono12':
             frame = QImage(image << 4, image.shape[0], image.shape[1], QImage.Format_Grayscale16)
+        elif self.pixel_type == 'mono16':
+            frame = QImage(image, image.shape[0], image.shape[1], QImage.Format_Grayscale16)
         elif image.dtype == np.uint8:
             frame = QImage(image, image.shape[0], image.shape[1], QImage.Format_RGB888)
         # frame = frame.scaled(640, 640, Qt.KeepAspectRatio, Qt.SmoothTransformation)
