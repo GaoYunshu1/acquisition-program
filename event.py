@@ -119,13 +119,22 @@ class MainWindow(QMainWindow):
                 self.motion.open_system()
             self.ui.init_motion_ctr.setText('开始扫描')
         elif self.ui.init_motion_ctr.text() == '开始扫描':
-            self.ui.init_motion_ctr.setText('终止位移台移动')
+            self.check_path()
             self.generate_scan_point()
             self.scan()
-
+            self.ui.init_motion_ctr.setText('终止位移台移动')
         else:
             self.ui.init_motion_ctr.setText('开始扫描')
-            self.motion.stop_all()
+            # self.motion.stop_all()
+    
+    def check_path(self):
+        try:
+            if self.save_path is None:
+                self.save_path = 'data'
+            if not os.path.exists(self.save_image):
+                os.makedirs(self.save_path)
+        except Exception as e:
+            print(f'保存路径错误:{e}')
 
     def generate_scan_point(self):
         mode = self.ui.scan_mode.currentText()
@@ -197,7 +206,7 @@ class MainWindow(QMainWindow):
     def save_image(self, name=None):
         image_ = self.camera.read_newest_image()
         image_ = Image.fromarray(image_)
-        print(2)
+        # print(2)
         if name is not None:
             save_path = os.path.join(self.save_path, f'{name}.png')
         else:

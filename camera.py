@@ -29,7 +29,7 @@ class Camera(ABC):
 
     @abstractmethod
     def get_frame_period(self):
-        """获取帧率"""
+        """获取帧率，返回：S"""
         pass
 
 

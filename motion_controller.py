@@ -1,9 +1,20 @@
 import time
 from pylablib.devices import SmarAct
+from abc import ABC, abstractmethod
 
 
-class smartact():
+class MotionController(ABC):
     def __init__(self):
+        super().__init__()
+
+    @abstractmethod
+    def move_by(self, distance, axis):
+        pass
+
+
+class smartact(MotionController):
+    def __init__(self):
+        super().__init__()
         device = SmarAct.list_msc2_devices()
         if len(device) == 0:
             print('没有位移台')
@@ -15,7 +26,7 @@ class smartact():
         self.motion.home(axis=axis)
 
     def move_by(self, distance, axis=0):
-        self.motion.move_by(distance/1000, axis=axis)
+        self.motion.move_by(distance / 1000, axis=axis)
 
     def stop_all(self):
         if self.motion.is_moving(axis=0):
@@ -24,19 +35,10 @@ class smartact():
             self.motion.stop(axis=1)
 
 
-# class newport():
-#     def __init__(self):
-#         self.motion = NewportXPS('192.168.254.254')
-#
-#     def home(self, axis=0):
-#         self.motion.home_group(group=f'group{axis}')
-#
-#     def move_by(self, distance, axis=0):
-#         self.motion.move_stage(stage=f'group{axis}.pos', value=distance, relative=True)
-
-
-class xps():
-    def __init__(self, IP='192.168.254.254', username: str = 'Administrator', password: str = 'Administrator', port: int = 5001) -> None:
+class xps(MotionController):
+    def __init__(self, IP='192.168.254.254', username: str = 'Administrator', password: str = 'Administrator',
+                 port: int = 5001) -> None:
+        super().__init__()
         try:
             global NewportXPS
             from newportxps import NewportXPS
@@ -66,9 +68,9 @@ class xps():
         for group in self.groups:
             self.xps.kill_group(group)
 
-    def move_by(self, position: int, axis: int, relative: bool = True):
+    def move_by(self, distance: int, axis: int, relative: bool = True):
         try:
-            self.xps.move_stage(value=position, stage=f'{self.groups[axis]}.Pos', relative=relative)
+            self.xps.move_stage(value=distance, stage=f'{self.groups[axis]}.Pos', relative=relative)
         except Exception as e:
             print(f'xps移动失败：{e}')
 
@@ -79,11 +81,14 @@ class xps():
                      max_jerktime: int = None):
         self.xps.set_velocity(stage, velocity, acceleration, min_jerktime, max_jerktime)
 
+
 import ctypes
 from ctypes import create_string_buffer, c_uint
 
-class nators():
+
+class nators(MotionController):
     def __init__(self):
+        super().__init__()
         dll_path = 'C:/Windows/System32/NTControl.dll'
         # 加载 DLL
         try:
@@ -92,7 +97,7 @@ class nators():
         except Exception as e:
             print(f"加载 DLL 时发生错误: {e}")
             self.stage_dll = None
-        
+
         # 定义 C 数据类型
         self.NT_STATUS = ctypes.c_int
         self.NT_INDEX = ctypes.c_uint
@@ -116,12 +121,12 @@ class nators():
             options_encoded = options.encode('utf-8')
 
             result = self.stage_dll.NT_OpenSystem(
-                ctypes.byref(system_index), 
-                system_locator.encode('utf-8'), 
+                ctypes.byref(system_index),
+                system_locator.encode('utf-8'),
                 options_encoded
             )
 
-            if result == 0:  
+            if result == 0:
                 self.system_index = system_index.value
                 print(f"成功连接到系统: {system_locator}")
                 return self.system_index
@@ -147,7 +152,7 @@ class nators():
         try:
             options_encoded = options.encode('utf-8')
 
-            out_buffer_size = 4096 
+            out_buffer_size = 4096
             out_buffer = create_string_buffer(out_buffer_size)
 
             io_buffer_size = c_uint(out_buffer_size)
@@ -156,7 +161,7 @@ class nators():
 
             actual_size = io_buffer_size.value
 
-            result_data = out_buffer.raw[:actual_size]  
+            result_data = out_buffer.raw[:actual_size]
             print(f"成功找到系统: {result_data}")
             return result_data
         except Exception as e:
@@ -175,9 +180,10 @@ class nators():
 
             diff_nanometers = int(distance * 1e6)
 
-            result = self.stage_dll.NT_GotoPositionRelative_S(self.system_index, channel[axis], ctypes.c_int(diff_nanometers))
+            result = self.stage_dll.NT_GotoPositionRelative_S(self.system_index, channel[axis],
+                                                              ctypes.c_int(diff_nanometers))
 
-            if result == 0: 
+            if result == 0:
                 print(f"成功将通道 {channel[axis]} 移动 {distance} 毫米")
             else:
                 print(f"错误: 无法移动通道 {channel[axis]}，错误代码: {result}")
