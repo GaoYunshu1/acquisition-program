@@ -8,7 +8,7 @@ from PyQt5.QtCore import QTimer, Qt
 import sys
 
 from gui_simple import Ui_MainWindow
-from camera import IDS, Basler
+from camera import IDS, Basler, IC4Camera, Ham
 from VSY import VSyCamera as vsy
 from VSY import VsyGvspPixelType
 from motion_controller import xps, smartact, nators
@@ -45,6 +45,9 @@ class MainWindow(QMainWindow):
         self.cur_point = 0
         self.x = []
         self.y = []
+        self.abs_x = []
+        self.abs_y = []
+        self.final_pos = None
 
         # 这里添加事件响应
         self.ui.carmera_init.clicked.connect(self.init_camera)
@@ -97,12 +100,27 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     print(f'启动VSY失败:{e}')
 
+            elif self.ui.select_cam.currentText() == 'ImagingSource':
+                try:
+                    self.camera = IC4Camera(1024, 1024)
+                    self.pixel_type = 'mono16'
+                    camera_flag = True
+                except Exception as e:
+                    print(f'启动IC4失败:{e}')
+            elif self.ui.select_cam.currentText() == 'Ham':
+                try:
+                    self.camera = Ham()
+                    camera_flag = True  # 此项必须
+                    self.pixel_type = 'mono16'  # 此项必须
+                except Exception as e:
+                    print(f'启动Ham失败:{e}')
+
             if camera_flag:
                 self.camera.start_acquisition()
-
+                sleep(1)  # 部分相机启动需要时间，不能立刻获取图像
                 # self.camera.set_frame_rate()
                 self.frame_period = self.camera.get_frame_period()
-                self.frame_period = int(self.frame_period * 1000) # VSY有问题，只能读最旧图像，必须同步刷新
+                self.frame_period = int(self.frame_period * 2000)  # VSY有问题，只能读最旧图像，必须同步刷新
                 print(self.frame_period)
                 self.image_timer = QTimer(self)
                 self.image_timer.timeout.connect(self.image_show)
@@ -140,7 +158,7 @@ class MainWindow(QMainWindow):
         else:
             self.ui.init_motion_ctr.setText('开始扫描')
             # self.motion.stop_all()
-    
+
     def check_path(self):
         try:
             if self.save_path is None:
@@ -165,8 +183,14 @@ class MainWindow(QMainWindow):
                         self.y.append(self.step)
                     else:
                         self.y.append(-self.step)
-        print(self.x, self.y)
-
+        # print(self.x, self.y)
+        current_x, current_y = 0, 0
+        for dx, dy in zip(self.x, self.y):
+            current_x += dx
+            current_y += dy
+            self.abs_x.append(current_x)
+            self.abs_y.append(current_y)
+        self.final_pos = (current_x, current_y)
     def scan(self):
         # if self.image_timer:
         #     self.image_timer.stop()
@@ -289,7 +313,7 @@ class MainWindow(QMainWindow):
         self.save_path = self.ui.save_path.text()
 
     def set_step(self):
-        self.step = float(self.ui.step.text()) 
+        self.step = float(self.ui.step.text())
 
     def set_scan_num(self):
         self.scan_num = int(self.ui.scan_num.text())
