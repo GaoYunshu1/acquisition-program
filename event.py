@@ -14,6 +14,9 @@ from VSY import VsyGvspPixelType
 from motion_controller import xps, smartact, nators
 import numpy as np
 from PIL import Image
+from Scanner import Scanner
+from copy import copy, deepcopy
+from typing import Union, List, Tuple
 
 
 class MainWindow(QMainWindow):
@@ -64,6 +67,7 @@ class MainWindow(QMainWindow):
         self.ui.xmotion.returnPressed.connect(self.set_xmotion)
         self.ui.y_motion.returnPressed.connect(self.set_ymotion)
         self.ui.log.clicked.connect(self.set_log)
+        self.ui.save_image.clicked.connect(self.save_dark)
 
     def init_camera(self):
 
@@ -163,57 +167,79 @@ class MainWindow(QMainWindow):
         try:
             if self.save_path is None:
                 self.save_path = 'data'
-            if not os.path.exists(self.save_image):
+            if not os.path.exists(self.save_path):
                 os.makedirs(self.save_path)
         except Exception as e:
             print(f'保存路径错误:{e}')
 
     def generate_scan_point(self):
         mode = self.ui.scan_mode.currentText()
-        if mode == '矩形':
-            for i in range(self.scan_num):
-                for j in range(self.scan_num):
-                    if j == 0 and i != 0:
-                        self.x.append(self.step)
-                    else:
-                        self.x.append(0)
-                    if self.x[-1] != 0:
-                        self.y.append(0)
-                    elif i % 2 == 0:
-                        self.y.append(self.step)
-                    else:
-                        self.y.append(-self.step)
-        # print(self.x, self.y)
-        current_x, current_y = 0, 0
-        for dx, dy in zip(self.x, self.y):
-            current_x += dx
-            current_y += dy
-            self.abs_x.append(current_x)
-            self.abs_y.append(current_y)
-        self.final_pos = (current_x, current_y)
+        mode_mapping = {
+            '矩形': 'rectangle',
+            '圆形': 'round',
+        }
+        normalized_mode = mode_mapping.get(mode)
+        scanner = Scanner(
+            step=self.step,
+            scan_num=self.scan_num,
+            mode=normalized_mode
+        )
+
+        attributes = ['x', 'y', 'abs_x', 'abs_y', 'final_pos']
+
+        def _smart_copy(value: Union[list, tuple]) -> Union[list, tuple]:
+            """智能复制：list深拷贝，tuple直接引用（因其不可变）"""
+            return deepcopy(value) if isinstance(value, list) else value
+
+        for attr in attributes:
+            original_value = getattr(scanner, attr)
+            setattr(self, attr, _smart_copy(original_value))
+
+
+        #     for i in range(self.scan_num):
+        #         for j in range(self.scan_num):
+        #             if j == 0 and i != 0:
+        #                 self.x.append(self.step)
+        #             else:
+        #                 self.x.append(0)
+        #             if self.x[-1] != 0:
+        #                 self.y.append(0)
+        #             elif i % 2 == 0:
+        #                 self.y.append(self.step)
+        #             else:
+        #                 self.y.append(-self.step)
+        # # print(self.x, self.y)
+        # current_x, current_y = 0, 0
+        # for dx, dy in zip(self.x, self.y):
+        #     current_x += dx
+        #     current_y += dy
+        #     self.abs_x.append(current_x)
+        #     self.abs_y.append(current_y)
+        # self.final_pos = (current_x, current_y)
+        # print(self.abs_x, self.abs_y)
+
     def scan(self):
-        # if self.image_timer:
-        #     self.image_timer.stop()
-        if self.camera:
-            self.save_image()
-        # if self.cur_point == 0:
-        #     time.sleep(20)
-        # for i in range(int(self.scan_num**2)):
+
         self.motion.move_by(self.x[self.cur_point], axis=0)
         sleep(0.2)
         self.motion.move_by(self.y[self.cur_point], axis=1)
         self.cur_point = self.cur_point + 1
+        if self.camera:
+            self.save_image(self.cur_point)
         if self.image_timer:
             QTimer.singleShot(100, self.start_display_next_scan)
 
     def start_display_next_scan(self):
         self.image_timer.start(self.frame_period)
 
-        if self.cur_point < self.scan_num ** 2:
+        if self.cur_point < len(self.x):
             # print(2)
             QTimer.singleShot(300, self.scan)
         else:
-            self.save_image()
+            self.motion.move_by(-self.final_pos[0], axis=0)
+            sleep(5)
+            self.motion.move_by(-self.final_pos[1], axis=1)
+        #     self.save_image()
 
     def image_show(self):
         # while time.time() - a < 20:
@@ -243,16 +269,18 @@ class MainWindow(QMainWindow):
         # time.sleep(2)
         # print(time.time())
 
-    def save_image(self, name=None):
+    def save_image(self, name=0):
         image_ = self.camera.read_newest_image()
         image_ = Image.fromarray(image_)
-        # print(2)
-        if name is not None:
-            save_path = os.path.join(self.save_path, f'{name}.png')
-        else:
-            save_path = os.path.join(self.save_path, f'{self.cur_point}.png')
+        if not os.path.exists(self.save_path):
+            os.makedirs(self.save_path)
+
+        save_path = os.path.join(self.save_path, f'{name}.png')
         print(save_path)
         image_.save(save_path)
+
+    def save_dark(self):
+        self.save_image(0)
 
     def crop_image(self, image):
         if image.ndim == 2:
