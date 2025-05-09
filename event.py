@@ -8,7 +8,7 @@ from PyQt5.QtCore import QTimer, Qt
 import sys
 
 from gui_simple import Ui_MainWindow
-from camera import IDS, Basler, IC4Camera, Ham
+from camera import IDS, Ham
 from VSY import VSyCamera as vsy
 from VSY import VsyGvspPixelType
 from motion_controller import xps, smartact, nators
@@ -29,8 +29,8 @@ class MainWindow(QMainWindow):
         self.photon = 20
         self.x_offset = 0
         self.y_offset = 0
-        self.xpixel_num = 2048
-        self.ypixel_num = 2048
+        self.xpixel_num = 1024
+        self.ypixel_num = 1024
         self.ex_time = 0.36
         self.save_path = None
         self.step = None
@@ -51,6 +51,7 @@ class MainWindow(QMainWindow):
         self.abs_x = []
         self.abs_y = []
         self.final_pos = None
+        self.center = None
 
         # 这里添加事件响应
         self.ui.carmera_init.clicked.connect(self.init_camera)
@@ -79,6 +80,7 @@ class MainWindow(QMainWindow):
                 try:
                     self.camera = IDS()
                     self.camera.set_pixel_rate(16e7)
+                    self.camera.set_color_mode('mono12')
                     self.camera.start_acquisition()
                     self.camera.wait_for_frame(2)
                     self.pixel_type = 'mono12'
@@ -86,14 +88,14 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     print(f'启动IDS失败:{e}')
             # print(4)
-            elif self.ui.select_cam.currentText() == 'Basler':
-                try:
-                    self.camera = Basler()
-                    self.camera.set_image_format('Mono12p')
-                    self.pixel_type = 'mono12'
-                    camera_flag = True
-                except Exception as e:
-                    print(f'启动Basler失败:{e}')
+            # elif self.ui.select_cam.currentText() == 'Basler':
+            #     try:
+            #         self.camera = Basler()
+            #         self.camera.set_image_format('Mono12p')
+            #         self.pixel_type = 'mono12'
+            #         camera_flag = True
+            #     except Exception as e:
+            #         print(f'启动Basler失败:{e}')
 
             elif self.ui.select_cam.currentText() == 'VSY':
                 try:
@@ -104,13 +106,13 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     print(f'启动VSY失败:{e}')
 
-            elif self.ui.select_cam.currentText() == 'ImagingSource':
-                try:
-                    self.camera = IC4Camera(1024, 1024)
-                    self.pixel_type = 'mono16'
-                    camera_flag = True
-                except Exception as e:
-                    print(f'启动IC4失败:{e}')
+            # elif self.ui.select_cam.currentText() == 'ImagingSource':
+            #     try:
+            #         self.camera = IC4Camera(1024, 1024)
+            #         self.pixel_type = 'mono16'
+            #         camera_flag = True
+            #     except Exception as e:
+            #         print(f'启动IC4失败:{e}')
             elif self.ui.select_cam.currentText() == 'Ham':
                 try:
                     self.camera = Ham()
@@ -138,8 +140,6 @@ class MainWindow(QMainWindow):
         # self.image_show()
 
     def init_mtn_ctr(self):
-        if self.image_timer is not None:
-            self.image_timer.stop()
         if self.ui.init_motion_ctr.text() == '位移台初始化':
             # self.motion_controller = motion_ctr('192.168.254.254')
             motion = self.ui.select_motion.currentText()
@@ -246,6 +246,8 @@ class MainWindow(QMainWindow):
         self.scene.clear()
         # print(self.camera.data)
         image = self.camera.read_newest_image()
+        # if self.center is None:
+        #     self.center = self.find_center(image)
         image = self.crop_image(image)
         self.photon = np.max(image)
         # print(image.shape)
@@ -271,6 +273,7 @@ class MainWindow(QMainWindow):
 
     def save_image(self, name=0):
         image_ = self.camera.read_newest_image()
+        image_ = self.crop_image(image_)
         image_ = Image.fromarray(image_)
         if not os.path.exists(self.save_path):
             os.makedirs(self.save_path)
@@ -280,7 +283,32 @@ class MainWindow(QMainWindow):
         image_.save(save_path)
 
     def save_dark(self):
-        self.save_image(0)
+        try:
+            self.check_path()
+            self.save_image(0)
+        except Exception as e:
+            print(e)
+
+    def find_center(self, image):
+        image = image - np.mean(image)
+        image[image < 0] = 0
+        image = image / np.max(image)
+
+        total_intensity = np.sum(image)
+
+        # 生成坐标网格
+        y_indices, x_indices = np.indices(image.shape)
+
+        # 计算加权质心坐标
+        print(np.sum(x_indices * image))
+        x_center = np.sum(x_indices * image) / total_intensity
+        y_center = np.sum(y_indices * image) / total_intensity
+
+        # 确保坐标在图像范围内
+        x_center = np.clip(x_center, 0, image.shape[1] - 1)
+        y_center = np.clip(y_center, 0, image.shape[0] - 1)
+
+        return (int(round(x_center)), int(round(y_center)))
 
     def crop_image(self, image):
         if image.ndim == 2:
@@ -288,8 +316,10 @@ class MainWindow(QMainWindow):
         else:
             width, height, _ = image.shape
 
-        x1 = width // 2 - self.xpixel_num // 2 + self.x_offset
-        y1 = height // 2 - self.ypixel_num // 2 + self.y_offset
+        # x1 = self.center[0] - self.xpixel_num // 2  # + self.x_offset
+        # y1 = self.center[1] - self.ypixel_num // 2  # + self.y_offset
+        x1 = width // 2 - self.xpixel_num // 2
+        y1 = height // 2 - self.ypixel_num // 2
         # print(x1, y1)
         x2 = x1 + self.xpixel_num
         y2 = y1 + self.ypixel_num

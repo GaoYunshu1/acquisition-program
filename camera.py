@@ -84,7 +84,7 @@ class IDS(Camera):
             if image is None:
                 self.wait_for_frame(1)
                 image = self.cam.read_newest_image()
-                return image
+            return image
         except Exception as e:
             print(f'IDS获取图像失败：{e}')
 

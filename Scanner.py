@@ -37,8 +37,8 @@ class Scanner:
                         break
                     pos_absolute.append((x, y))
             # 转换为相对位移
-            self.x = []
-            self.y = []
+            self.x = [0]
+            self.y = [0]
             for i in range(1, len(pos_absolute)):
                 prev_x, prev_y = pos_absolute[i - 1]
                 curr_x, curr_y = pos_absolute[i]
