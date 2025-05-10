@@ -219,10 +219,9 @@ class MainWindow(QMainWindow):
         # print(self.abs_x, self.abs_y)
 
     def scan(self):
-
         self.motion.move_by(self.x[self.cur_point], axis=0)
-        sleep(0.2)
         self.motion.move_by(self.y[self.cur_point], axis=1)
+        sleep(0.8)
         self.cur_point = self.cur_point + 1
         if self.camera:
             self.save_image(self.cur_point)
