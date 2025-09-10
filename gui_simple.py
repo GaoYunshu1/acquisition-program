@@ -316,7 +316,7 @@ class Ui_MainWindow(object):
         self.label_15.setText(_translate("MainWindow", "相机"))
         self.select_cam.setItemText(0, _translate("MainWindow", "IDS"))
         # self.select_cam.setItemText(1, _translate("MainWindow", "Basler"))
-        self.select_cam.setItemText(1, _translate("MainWindow", "VSY"))
+        self.select_cam.setItemText(1, _translate("MainWindow", "ids_peak"))
         self.select_cam.setItemText(2, _translate("MainWindow", "Ham"))
         self.select_cam.setItemText(3, _translate("MainWindow", "test1"))
         self.select_cam.setItemText(4, _translate("MainWindow", "test2"))

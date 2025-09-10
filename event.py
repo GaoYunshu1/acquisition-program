@@ -1,3 +1,4 @@
+from peak import IDSPeakCamera
 import os
 import time
 from audioop import error
@@ -120,6 +121,14 @@ class MainWindow(QMainWindow):
                     self.pixel_type = 'mono16'  # 此项必须
                 except Exception as e:
                     print(f'启动Ham失败:{e}')
+            elif self.ui.select_cam.currentText() == 'ids_peak':
+                try:
+                    self.camera = IDSPeakCamera()
+                    camera_flag = True
+                    self.pixel_type = 'mono12'
+                except Exception as e:
+                    print(f'启动ids_peak失败{e}')
+            
 
             if camera_flag:
                 self.camera.start_acquisition()
