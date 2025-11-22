@@ -53,6 +53,8 @@ class MainWindow(QMainWindow):
         self.abs_y = []
         self.final_pos = None
         self.center = None
+        self.dark = None
+        self.dps = []
 
         # 这里添加事件响应
         self.ui.carmera_init.clicked.connect(self.init_camera)
@@ -247,6 +249,10 @@ class MainWindow(QMainWindow):
             self.motion.move_by(-self.final_pos[0], axis=0)
             sleep(5)
             self.motion.move_by(-self.final_pos[1], axis=1)
+            print('保存dps')
+            from h5py import File
+            with File(os.path.join(self.save_path, 'dps.h5'), 'w') as f:
+                f.create_dataset('dps', data=self.dps)
         #     self.save_image()
 
     def image_show(self):
@@ -280,15 +286,24 @@ class MainWindow(QMainWindow):
         # print(time.time())
 
     def save_image(self, name=0):
-        image_ = self.camera.read_newest_image()
-        image_ = self.crop_image(image_)
-        image_ = Image.fromarray(image_)
-        if not os.path.exists(self.save_path):
-            os.makedirs(self.save_path)
+        try:
+            image_ = self.camera.read_newest_image()
+            image_ = self.crop_image(image_)
+            if name == 0:
+                self.dark = image_
+            else:
+                image_ = image_ - self.dark
+                self.dps.append(image_)
+            image_ = Image.fromarray(image_)
+            if not os.path.exists(self.save_path):
+                os.makedirs(self.save_path)
 
-        save_path = os.path.join(self.save_path, f'{name}.png')
-        print(save_path)
-        image_.save(save_path)
+            save_path = os.path.join(self.save_path, f'{name}.png')
+            print(save_path)
+            image_.save(save_path)
+
+        except Exception as e:
+            raise e
 
     def save_dark(self):
         try:

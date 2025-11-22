@@ -3,22 +3,73 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
+import random
+import os
 
 
 class Scanner:
-    def __init__(self, step, scan_num, mode='round', nth=6):
+    """
+    Ptychography扫描器类，用于生成标准的扫描点位置。
+    支持多种扫描模式：圆形(round)、矩形(rectangle)和费马螺旋线(fermat)。
+    可选添加随机偏移。
+    支持将扫描点位置保存为npy格式。
+    """
+    def __init__(self, step, scan_num, mode='round', nth=6, random_offset=False, offset_ratio=0.2):
+        """
+        初始化扫描器
+        
+        参数:
+            step: 扫描步长
+            scan_num: 扫描数量/范围
+            mode: 扫描模式，可选 'round', 'rectangle', 'fermat'
+            nth: 圆形扫描模式下控制基础角度数目
+            random_offset: 是否添加随机偏移
+            offset_ratio: 随机偏移比例，相对于step的比例
+        """
         self.step = step
         self.scan_num = scan_num
         self.mode = mode
-        self.nth = nth  # 新增参数nth，控制基础角度数目
+        self.nth = nth  # 控制基础角度数目
+        self.random_offset = random_offset  # 是否添加随机偏移
+        self.offset_ratio = offset_ratio  # 随机偏移比例
         self.x = []
         self.y = []
         self.abs_x = []
         self.abs_y = []
         self.final_pos = (0, 0)
         self.generate_scan_points()
+    
+    def _apply_random_offset(self, pos_absolute):
+        """
+        对绝对位置应用随机偏移
+        
+        参数:
+            pos_absolute: 绝对位置坐标列表 [(x1,y1), (x2,y2), ...]
+            
+        返回:
+            添加随机偏移后的位置列表
+        """
+        if not self.random_offset:
+            return pos_absolute
+            
+        max_offset = self.step * self.offset_ratio
+        offset_pos = []
+        
+        for x, y in pos_absolute:
+            # 对每个点添加随机偏移，但保持第一个点（原点）不变
+            if x == 0.0 and y == 0.0 and len(offset_pos) == 0:
+                offset_pos.append((x, y))
+            else:
+                dx = random.uniform(-max_offset, max_offset)
+                dy = random.uniform(-max_offset, max_offset)
+                offset_pos.append((x + dx, y + dy))
+                
+        return offset_pos
 
     def generate_scan_points(self):
+        """生成扫描点位置"""
+        pos_absolute = []
+        
         if self.mode == 'round':
             # 计算扫描区域的半长
             scan_half_length = self.step * self.scan_num
@@ -30,55 +81,164 @@ class Scanner:
                 dth = 2 * math.pi / nth_angles
                 for ith in range(nth_angles):
                     theta = ith * dth
-                    x = rr * math.sin(theta)  # 对应Matlab的x坐标
-                    y = rr * math.cos(theta)  # 对应Matlab的y坐标
+                    x = rr * math.sin(theta)
+                    y = rr * math.cos(theta)
                     # 检查是否超出扫描区域
                     if abs(x) > scan_half_length or abs(y) > scan_half_length:
                         break
                     pos_absolute.append((x, y))
-            # 转换为相对位移
-            self.x = [0]
-            self.y = [0]
-            for i in range(1, len(pos_absolute)):
-                prev_x, prev_y = pos_absolute[i - 1]
-                curr_x, curr_y = pos_absolute[i]
-                self.x.append(curr_x - prev_x)
-                self.y.append(curr_y - prev_y)
-            # 计算绝对坐标
-            current_x, current_y = 0.0, 0.0
-            self.abs_x.append(current_x)
-            self.abs_y.append(current_y)
-            for dx, dy in zip(self.x, self.y):
-                current_x += dx
-                current_y += dy
-                self.abs_x.append(current_x)
-                self.abs_y.append(current_y)
-            self.final_pos = (current_x, current_y)
-
+                    
         elif self.mode == 'rectangle':
-            # 修改后的矩形扫描代码（示例，需根据需求调整）
-            # 生成蛇形路径的相对位移
-            self.x = []
-            self.y = []
+            # 矩形扫描（蛇形路径）
+            pos_absolute = [(0.0, 0.0)]
             for i in range(self.scan_num):
                 for j in range(self.scan_num):
-                    if j == 0 and i != 0:
-                        self.x.append(self.step)
-                    else:
-                        self.x.append(0)
-                    if self.x[-1] != 0:
-                        self.y.append(0)
-                    elif i % 2 == 0:
-                        self.y.append(self.step)
-                    else:
-                        self.y.append(-self.step)
-            current_x, current_y = 0, 0
-            for dx, dy in zip(self.x, self.y):
-                current_x += dx
-                current_y += dy
-                self.abs_x.append(current_x)
-                self.abs_y.append(current_y)
-            self.final_pos = (current_x, current_y)
+                    if i == 0 and j == 0:
+                        continue  # 跳过原点，因为已经添加
+                    
+                    if i % 2 == 0:  # 偶数行从左到右
+                        x = j * self.step
+                    else:  # 奇数行从右到左
+                        x = (self.scan_num - 1 - j) * self.step
+                    
+                    y = i * self.step
+                    pos_absolute.append((x, y))
+                    
+        elif self.mode == 'fermat':
+            # 费马螺旋线扫描
+            # 黄金角，约137.5度
+            golden_angle = math.pi / self.nth
+            
+            # 计算需要的点数，确保覆盖扫描区域
+            scan_radius = self.step * self.scan_num
+            # area = math.pi * scan_radius**2
+            # points_count = int(area / (self.step**2))
+            
+            pos_absolute = [(0.0, 0.0)]  # 起始于原点
+            
+            # for i in range(1, points_count):
+            i = 0
+            while True:
+                i += 1
+                # 费马螺旋线参数方程
+                theta = i * golden_angle
+                r = self.step * math.sqrt(theta)
+                
+                
+                x = r * math.cos(theta)
+                y = r * math.sin(theta)
+                
+                # 检查是否超出扫描区域
+                if math.sqrt(x**2 + y**2) > scan_radius:
+                    break
+                    
+                pos_absolute.append((x, y))
+        
+        # 应用随机偏移（如果启用）
+        pos_absolute = self._apply_random_offset(pos_absolute)
+            
+        # 转换为相对位移
+        self.x = [0]
+        self.y = [0]
+        for i in range(1, len(pos_absolute)):
+            prev_x, prev_y = pos_absolute[i - 1]
+            curr_x, curr_y = pos_absolute[i]
+            self.x.append(curr_x - prev_x)
+            self.y.append(curr_y - prev_y)
+            
+        # 计算绝对坐标
+        current_x, current_y = 0.0, 0.0
+        self.abs_x = []
+        self.abs_y = []
+        for dx, dy in zip(self.x, self.y):
+            current_x += dx
+            current_y += dy
+            self.abs_x.append(current_x)
+            self.abs_y.append(current_y)
+            
+        self.final_pos = (current_x, current_y)
+        
+    def save_to_npy(self, save_path, filename=None):
+        """
+        将扫描点位置保存为npy格式
+        
+        参数:
+            save_path: 保存路径，可以是文件夹路径或完整文件路径
+            filename: 文件名（可选），如果save_path是文件夹路径，则需要提供
+            
+        返回:
+            保存的文件路径
+        """
+        # 检查保存路径
+        if os.path.isdir(save_path):
+            if filename is None:
+                # 如果未提供文件名，则自动生成
+                filename = f"scan_{self.mode}_step{self.step}_num{self.scan_num}"
+                if self.random_offset:
+                    filename += f"_random{self.offset_ratio}"
+                filename += ".npy"
+            save_file = os.path.join(save_path, filename)
+        else:
+            # 如果提供的是完整文件路径
+            save_file = save_path
+            # 确保文件扩展名为.npy
+            if not save_file.endswith('.npy'):
+                save_file += '.npy'
+                
+        # 创建要保存的数据字典
+        scan_data = {
+            'mode': self.mode,
+            'step': self.step,
+            'scan_num': self.scan_num,
+            'nth': self.nth,
+            'random_offset': self.random_offset,
+            'offset_ratio': self.offset_ratio,
+            'x': np.array(self.x),
+            'y': np.array(self.y),
+            'abs_x': np.array(self.abs_x),
+            'abs_y': np.array(self.abs_y),
+            'final_pos': self.final_pos
+        }
+        
+        # 保存为npy格式
+        np.save(save_file, scan_data)
+        print(f"扫描点位置已保存至: {save_file}")
+        
+        return save_file
+        
+    @classmethod
+    def load_from_npy(cls, file_path):
+        """
+        从npy文件加载扫描点位置
+        
+        参数:
+            file_path: npy文件路径
+            
+        返回:
+            Scanner对象
+        """
+        # 加载npy文件
+        scan_data = np.load(file_path, allow_pickle=True).item()
+        
+        # 创建Scanner对象
+        scanner = cls(
+            step=scan_data['step'],
+            scan_num=scan_data['scan_num'],
+            mode=scan_data['mode'],
+            nth=scan_data['nth'],
+            random_offset=scan_data['random_offset'],
+            offset_ratio=scan_data['offset_ratio']
+        )
+        
+        # 覆盖自动生成的扫描点
+        scanner.x = scan_data['x'].tolist()
+        scanner.y = scan_data['y'].tolist()
+        scanner.abs_x = scan_data['abs_x'].tolist()
+        scanner.abs_y = scan_data['abs_y'].tolist()
+        scanner.final_pos = scan_data['final_pos']
+        
+        print(f"已从文件加载扫描点位置: {file_path}")
+        return scanner
 
 
 def visualize_scan_path(scanner:Scanner, save_path=None, dpi=100):
@@ -171,11 +331,20 @@ def visualize_scan_path(scanner:Scanner, save_path=None, dpi=100):
 
 
 if __name__ == '__main__':
-    scanner = Scanner(0.1, 5, mode='round')
+    # scanner = Scanner(0.3, 5, nth=6,mode='rectangle', random_offset=True, offset_ratio=0.1)
+    scanner = Scanner(0.3, 5, nth=6,mode='fermat')
+    # mat_struct = {
+    #     # 'sz_fft': np.int32(params.sz_fft),
+    #     # 'wavelength': np.float64(params.wavelength),
+    #     # 'IDS_dx': np.float64(params.pixel_size),
+    #     'pos': {'x': scanner.abs_x, 'y': scanner.abs_y}
+    # }
+    # from scipy.io import savemat
+    # savemat('expt_para.mat', {'g': mat_struct})
     print(len(scanner.x))
     # print(scanner.y)
-    print(f'{scanner.abs_x}')
-    print(f'{scanner.abs_y}')
+    # print(f'{scanner.abs_x}')
+    # print(f'{scanner.abs_y}')
     visualize_scan_path(
         scanner,
         # save_path='scan_path.png',
