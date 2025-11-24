@@ -1,4 +1,4 @@
-from peak import IDSPeakCamera
+
 import os
 import time
 from audioop import error
@@ -109,6 +109,15 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     print(f'启动VSY失败:{e}')
 
+            elif self.ui.select_cam.currentText() == 'Lucid':
+                try:
+                    from lucid import LucidCamera
+                    self.camera = LucidCamera()
+                    self.pixel_type = 'mono12'
+                    camera_flag = True
+                except Exception as e:
+                    print(f'启动Lucid失败:{e}')
+
             # elif self.ui.select_cam.currentText() == 'ImagingSource':
             #     try:
             #         self.camera = IC4Camera(1024, 1024)
@@ -125,6 +134,7 @@ class MainWindow(QMainWindow):
                     print(f'启动Ham失败:{e}')
             elif self.ui.select_cam.currentText() == 'ids_peak':
                 try:
+                    from peak import IDSPeakCamera
                     self.camera = IDSPeakCamera()
                     camera_flag = True
                     self.pixel_type = 'mono12'
@@ -276,7 +286,7 @@ class MainWindow(QMainWindow):
             frame = QImage(image, image.shape[0], image.shape[1], QImage.Format_Grayscale16)
         elif image.dtype == np.uint8:
             frame = QImage(image, image.shape[0], image.shape[1], QImage.Format_RGB888)
-        # frame = frame.scaled(640, 640, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        frame = frame.scaled(640, 640, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         pix = QPixmap.fromImage(frame)
 
         # print(2)
