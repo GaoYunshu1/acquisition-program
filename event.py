@@ -140,6 +140,15 @@ class MainWindow(QMainWindow):
                     self.pixel_type = 'mono12'
                 except Exception as e:
                     print(f'启动ids_peak失败{e}')
+
+            elif self.ui.select_cam.currentText() == 'PM':
+                try:
+                    from photometrics import PyVCAM
+                    self.camera = PyVCAM()
+                    camera_flag = True
+                    self.pixel_type = 'mono16'
+                except Exception as e:
+                    print(f'启动PM失败')
             
 
             if camera_flag:
@@ -147,7 +156,7 @@ class MainWindow(QMainWindow):
                 sleep(1)  # 部分相机启动需要时间，不能立刻获取图像
                 # self.camera.set_frame_rate()
                 self.frame_period = self.camera.get_frame_period()
-                self.frame_period = int(self.frame_period * 2000)  # VSY有问题，只能读最旧图像，必须同步刷新
+                self.frame_period = int(self.frame_period * 1000)  # VSY有问题，只能读最旧图像，必须同步刷新
                 print(self.frame_period)
                 self.image_timer = QTimer(self)
                 self.image_timer.timeout.connect(self.image_show)

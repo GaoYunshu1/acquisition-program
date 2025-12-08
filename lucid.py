@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 import numpy as np
 from PIL import Image as PIL_Image
 from arena_api.system import system
-
 from camera import Camera
 
 

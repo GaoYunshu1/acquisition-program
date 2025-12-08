@@ -3,7 +3,6 @@ import sys
 import ctypes
 from ctypes import *
 import numpy as np
-import cv2
 from abc import ABC, abstractmethod
 
 
@@ -287,10 +286,6 @@ class VSyCamera(Camera):
         dtype = np.uint16
         img_np = np.frombuffer(img_buffer, dtype=dtype).reshape((self.height, self.width))
 
-        # 16bit图像归一化
-        # if self.bits == 16:
-        #     img_np = cv2.normalize(img_np, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-
         return img_np
 
     def get_frame_period(self):
@@ -333,23 +328,15 @@ if __name__ == "__main__":
     # 开始采集
     cam.start_acquisition()
 
-    # 获取图像
-    # for _ in range(5):
-    #     img = cam.read_newest_image()
-    #     if img is not None:
-    #         cv2.imshow("Preview", img)
-    #         cv2.waitKey(1000)
+
     img = cam.read_newest_image()
-    # sleep(0.5)
-    # cv2.imshow("Preview", img)
-    # cv2.waitKey(1000)
+
     print(np.min(img), np.mean(img), np.max(img))
     
     cam.set_ex_time(0.01)
 
     img = cam.read_newest_image()
-    # cv2.imshow("Preview", img)
-    # cv2.waitKey(1000)
+
     print(np.min(img), np.mean(img), np.max(img))
 
     # 获取帧率信息

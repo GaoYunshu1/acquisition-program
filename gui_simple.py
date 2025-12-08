@@ -319,7 +319,7 @@ class Ui_MainWindow(object):
         self.select_cam.setItemText(1, _translate("MainWindow", "ids_peak"))
         self.select_cam.setItemText(2, _translate("MainWindow", "Ham"))
         self.select_cam.setItemText(3, _translate("MainWindow", "Lucid"))
-        self.select_cam.setItemText(4, _translate("MainWindow", "test2"))
+        self.select_cam.setItemText(4, _translate("MainWindow", "PM"))
         self.label_16.setText(_translate("MainWindow", "位移台"))
         self.select_motion.setItemText(0, _translate("MainWindow", "newportxps"))
         self.select_motion.setItemText(1, _translate("MainWindow", "smartact"))
