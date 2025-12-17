@@ -3,6 +3,7 @@ import os
 import time
 import numpy as np
 from PIL import Image
+
 # PyQt6 导入
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QVBoxLayout, QFileDialog
 from PyQt6.QtGui import QImage, QPixmap
@@ -12,18 +13,13 @@ from PyQt6.QtCore import QTimer, Qt, pyqtSignal
 from gui_generate import ModernUI
 
 # 尝试导入硬件驱动
-try:
-    from camera import IDS, Ham
-    from VSY import VSyCamera as vsy
-    from VSY import VsyGvspPixelType
-    from motion_controller import xps, smartact, nators
-    from Scanner import Scanner
-    HARDWARE_AVAILABLE = True
-except ImportError:
-    print("硬件驱动未找到，启用模拟模式。")
-    HARDWARE_AVAILABLE = False
-    class Scanner: pass
-    class IDS: pass
+from camera import IDS, Ham
+from VSY import VSyCamera as vsy
+from motion_controller import xps, smartact, nators
+from Scanner import Scanner, visualize_scan_path 
+from lucid import LucidCamera
+from photometrics import PyVCAM
+from peak import IDSPeakCamera
 
 # =========================================
 # 自定义图像显示控件 (PyQt6)
@@ -105,6 +101,7 @@ class LogicWindow(ModernUI):
         self.timer.timeout.connect(self.update_frame)
         self.is_live = False
         self.save_dir = "data"
+        self.scanner = None
 
         # --- 3. 信号绑定 ---
         self.btn_open_cam.clicked.connect(self.init_camera)
@@ -114,6 +111,7 @@ class LogicWindow(ModernUI):
         self.btn_cap.clicked.connect(self.start_scan)
         self.btn_save.clicked.connect(self.save_current_frame)
         self.btn_browse.clicked.connect(self.select_folder)
+        self.btn_show_path.clicked.connect(self.preview_scan_path)
 
         # 位移台
         self.stage_widget.btn_up.clicked.connect(lambda: self.move_stage_manual('Y', 1))
@@ -125,6 +123,7 @@ class LogicWindow(ModernUI):
 
         # ROI
         self.btn_center.clicked.connect(self.calculate_center)
+        self.exposure_spin.valueChanged.connect(self.set_exposure_time)
 
     def update_mouse_val(self, x, y, val):
         if x >= 0:
@@ -136,36 +135,74 @@ class LogicWindow(ModernUI):
         cam_name = self.combo_camera.currentText()
         self.log(f"初始化相机: {cam_name}...")
         try:
-            if cam_name == "Simulated" or not HARDWARE_AVAILABLE:
-                self.log(">> 启用模拟相机驱动")
-                class SimCam:
-                    def read_newest_image(self):
-                        img = np.random.randint(0, 500, (1024, 1024), dtype=np.uint16)
-                        img[500:520, 500:520] += 2000
-                        return img
-                    def set_ex_time(self, t): pass
-                self.camera = SimCam()
-            else:
-                if cam_name == "IDS":
-                    self.camera = IDS()
+            if cam_name == "Simulated":
+                self._init_simulated_camera()
+            elif cam_name == "IDS":
+                self.camera = IDS()
+                self.camera.start_acquisition()
+            elif cam_name == "Ham":
+                self.camera = Ham()
+                self.camera.start_acquisition()
+            elif cam_name == "Lucid":
+                if 'LucidCamera' in globals() and LucidCamera:
+                    self.camera = LucidCamera()
                     self.camera.start_acquisition()
+                else:
+                    self.log("Lucid 驱动未加载")
+                    return
+            elif cam_name == "PM":
+                if 'PyVCAM' in globals() and PyVCAM:
+                    self.camera = PyVCAM()
+                    self.camera.start_acquisition()
+                else:
+                    self.log("Photometrics 驱动未加载")
+                    return
+            elif cam_name == "IDS_Peak":
+                 if 'IDSPeakCamera' in globals() and IDSPeakCamera:
+                    self.camera = IDSPeakCamera()
+                    self.camera.start_acquisition()
+                 else:
+                    self.log("IDS Peak 驱动未加载")
+                    return
             
             self.btn_open_cam.setText("已就绪")
             self.btn_open_cam.setStyleSheet("background-color: #a0d468")
             self.log("相机初始化成功")
         except Exception as e:
             self.log(f"相机错误: {e}")
+            # 出错时启用模拟相机防止崩溃
+            self._init_simulated_camera()
+            
+    def _init_simulated_camera(self):
+        self.log(">> 启用模拟相机驱动")
+        class SimCam:
+            def read_newest_image(self):
+                img = np.random.randint(0, 500, (1024, 1024), dtype=np.uint16)
+                img[500:520, 500:520] += 2000
+                return img
+            def set_ex_time(self, t): pass
+        self.camera = SimCam()
 
     def init_motion(self):
         stage_name = self.combo_stage.currentText()
         self.log(f"连接位移台: {stage_name}...")
         try:
+            if stage_name == "SmartAct":
+                self.motion = smartact()
+            elif stage_name == "NewPort (XPS)":
+                self.motion = xps()
+                self.motion.init_groups(['Group3', 'Group4']) # 根据实际情况调整
+            elif stage_name == "Nators":
+                self.motion = nators()
+                self.motion.open_system()
+            elif stage_name == "Simulated":
+                class SimMotion:
+                    def move_by(self, dist, axis): print(f"Move Axis {axis} by {dist}")
+                    def move_to(self, pos, axis): print(f"Move Axis {axis} to {pos}")
+                self.motion = SimMotion()
+
             self.btn_connect_stage.setText("已连接")
             self.log("位移台连接成功")
-            class SimMotion:
-                def move_by(self, dist, axis): print(f"Move Axis {axis} by {dist}")
-                def move_to(self, pos, axis): print(f"Move Axis {axis} to {pos}")
-            self.motion = SimMotion()
         except Exception as e:
             self.log(f"位移台错误: {e}")
 
@@ -188,6 +225,8 @@ class LogicWindow(ModernUI):
         if self.camera:
             try:
                 img = self.camera.read_newest_image()
+                if img is None: return
+                
                 max_val = np.max(img)
                 self.line_global_max.setText(f"{max_val}")
                 
@@ -198,7 +237,14 @@ class LogicWindow(ModernUI):
                 else:
                     self.image_view.update_image(img)
             except Exception as e:
-                print(e)
+                pass
+
+    def set_exposure_time(self):
+        if self.camera:
+            val = self.exposure_spin.value()
+            # 大部分相机驱动接收秒为单位
+            self.camera.set_ex_time(val / 1000.0)
+            self.log(f"曝光设为: {val} ms")
 
     def move_stage_manual(self, axis_name, direction):
         if not self.motion:
@@ -222,6 +268,7 @@ class LogicWindow(ModernUI):
         self.log(f"移动轴 {target_axis}, 距离 {dist}")
         self.motion.move_by(dist, axis=target_axis)
         
+        # 简单更新UI坐标显示
         if axis_name == 'X':
             old_val = float(self.stage_widget.lbl_x.text().split()[1])
             self.stage_widget.lbl_x.setText(f"X: {old_val + dist:.3f} mm")
@@ -233,14 +280,18 @@ class LogicWindow(ModernUI):
         x = self.stage_widget.target_x.value()
         y = self.stage_widget.target_y.value()
         self.log(f"移动至绝对坐标: ({x}, {y})")
-        if self.motion:
+        # 需要位移台支持 move_to 接口，如果只有 move_by 需要改逻辑
+        if self.motion and hasattr(self.motion, 'move_to'):
             self.motion.move_to(x, axis=0) 
             self.motion.move_to(y, axis=1)
+        else:
+            self.log("当前位移台驱动不支持绝对定位指令")
 
     def zero_stage(self):
         self.log("坐标归零")
         self.stage_widget.lbl_x.setText("X: 0.000 mm")
         self.stage_widget.lbl_y.setText("Y: 0.000 mm")
+        # 如果硬件支持硬件归零，可在此调用 self.motion.home()
 
     def calculate_center(self):
         if self.image_view.np_img is None:
@@ -262,13 +313,89 @@ class LogicWindow(ModernUI):
             self.save_dir_edit.setText(path)
             self.save_dir = path
 
-    def start_scan(self):
-        self.log("开始扫描...")
+    def preview_scan_path(self):
+        """生成并预览扫描路径"""
+        try:
+            mode_map = {"矩形": "rectangle", "圆形": "round", "螺旋": "fermat", "fermat": "fermat"}
+            mode = mode_map.get(self.combo_scan_mode.currentText(), "round")
+            
+            # 解析范围
+            r_str = self.scan_range.text().split(',')
+            if len(r_str) == 1: 
+                r_val = float(r_str[0])
+            else:
+                r_val = float(r_str[0]) # 简单起见取第一个数作为范围基准
+                
+            step = float(self.scan_step.text())
+            num = self.scan_points.value()
+            
+            # 如果是矩形/圆形，通常 num 指的是边长点数或者半径点数，而不是总点数
+            # 这里简单适配 Scanner 类的参数
+            if mode == 'rectangle':
+                 # 假设范围是边长，计算点数
+                 scan_num = int(r_val / step)
+            else:
+                 scan_num = num # 对于螺旋线，直接用点数
+            
+            self.log(f"生成扫描路径: {mode}, 步长{step}")
+            self.scanner = Scanner(step=step, scan_num=scan_num, mode=mode)
+            
+            # 调用可视化
+            visualize_scan_path(self.scanner)
+            self.log(f"路径生成完毕，总点数: {len(self.scanner.x)}")
+            
+        except Exception as e:
+            self.log(f"生成路径失败: {e}")
 
-    def save_current_frame(self):
+    def start_scan(self):
+        if not self.scanner:
+            self.log("请先生成扫描路径！")
+            return
+        
+        self.log(f"开始采集，总计 {len(self.scanner.x)} 点...")
+        # 这里需要实现一个非阻塞的扫描循环
+        # 简单演示：使用 QTimer 逐点移动
+        self.scan_idx = 0
+        self.scan_timer = QTimer()
+        self.scan_timer.timeout.connect(self._scan_step)
+        self.scan_timer.start(500) # 500ms 一点
+        
+    def _scan_step(self):
+        if self.scan_idx >= len(self.scanner.x):
+            self.scan_timer.stop()
+            self.log("扫描完成")
+            # 回到原点
+            final_pos = self.scanner.final_pos
+            if self.motion:
+                self.motion.move_by(-final_pos[0], axis=0)
+                self.motion.move_by(-final_pos[1], axis=1)
+            return
+            
+        dx = self.scanner.x[self.scan_idx]
+        dy = self.scanner.y[self.scan_idx]
+        
+        if self.motion:
+            self.motion.move_by(dx, axis=0)
+            self.motion.move_by(dy, axis=1)
+            
+        # 拍照保存
+        self.save_current_frame(filename=f"scan_{self.scan_idx}.png")
+        self.scan_idx += 1
+
+    def save_current_frame(self, filename=None):
         if self.image_view.np_img is not None:
-            path = os.path.join(self.save_dir, f"capture_{int(time.time())}.png")
-            self.log(f"图片已保存: {path}")
+            if not filename:
+                filename = f"capture_{int(time.time())}.png"
+            path = os.path.join(self.save_dir, filename)
+            
+            # 确保目录存在
+            if not os.path.exists(self.save_dir):
+                os.makedirs(self.save_dir)
+                
+            # 保存
+            img = Image.fromarray(self.image_view.np_img)
+            img.save(path)
+            self.log(f"Saved: {filename}")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

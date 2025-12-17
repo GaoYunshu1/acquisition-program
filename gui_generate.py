@@ -68,21 +68,21 @@ class StageControlWidget(QWidget):
         self.step_spin.setValue(0.1)
         self.step_spin.setSingleStep(0.01)
         self.step_spin.setSuffix(" mm")
-        self.step_spin.setAlignment(Qt.AlignmentFlag.AlignRight) # PyQt6 Enum
+        self.step_spin.setAlignment(Qt.AlignmentFlag.AlignRight)
         param_layout.addRow("点动步长:", self.step_spin)
 
         # 绝对移动 X (QDoubleSpinBox, 右对齐)
         self.target_x = QDoubleSpinBox()
         self.target_x.setRange(-1000, 1000)
         self.target_x.setDecimals(3)
-        self.target_x.setAlignment(Qt.AlignmentFlag.AlignRight) # PyQt6 Enum
+        self.target_x.setAlignment(Qt.AlignmentFlag.AlignRight)
         param_layout.addRow("X:", self.target_x)
 
         # 绝对移动 Y (QDoubleSpinBox, 右对齐)
         self.target_y = QDoubleSpinBox()
         self.target_y.setRange(-1000, 1000)
         self.target_y.setDecimals(3)
-        self.target_y.setAlignment(Qt.AlignmentFlag.AlignRight) # PyQt6 Enum
+        self.target_y.setAlignment(Qt.AlignmentFlag.AlignRight)
         param_layout.addRow("Y:", self.target_y)
         
         self.btn_go = QPushButton("移动到坐标 (Go)")
@@ -111,12 +111,12 @@ class StageControlWidget(QWidget):
         return btn
 
 # ==========================================
-# 2. 主界面
+# 2. 主界面 (ModernUI)
 # ==========================================
 class ModernUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("采集控制系统 v6 (PyQt6)")
+        self.setWindowTitle("采集控制系统 v6.0 (PyQt6)")
         self.resize(1280, 950)
 
         central_widget = QWidget()
@@ -128,14 +128,14 @@ class ModernUI(QMainWindow):
 
         # --- 左侧：图像显示区 ---
         self.image_area = QFrame()
-        self.image_area.setFrameShape(QFrame.Shape.StyledPanel) # PyQt6 Enum
+        self.image_area.setFrameShape(QFrame.Shape.StyledPanel)
         self.image_area.setStyleSheet("background-color: #202020; border: 1px solid #555;")
-        self.image_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding) # PyQt6 Enum
+        self.image_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # 这里的 Label 只是占位符，event.py 会用 InteractiveImageView 替换它
         lbl_img = QLabel("Initializing Camera...", self.image_area)
         lbl_img.setStyleSheet("color: #666; font-size: 20px;")
-        lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter) # PyQt6 Enum
+        lbl_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
         img_layout = QVBoxLayout(self.image_area)
         img_layout.addWidget(lbl_img)
         
@@ -169,9 +169,8 @@ class ModernUI(QMainWindow):
     def setup_combo_centered(self, combo):
         combo.setEditable(True)
         combo.lineEdit().setReadOnly(True)
-        combo.lineEdit().setAlignment(Qt.AlignmentFlag.AlignCenter) # PyQt6 Enum
+        combo.lineEdit().setAlignment(Qt.AlignmentFlag.AlignCenter)
         for i in range(combo.count()):
-            # PyQt6 ItemDataRole
             combo.setItemData(i, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
 
     def setup_hardware_tab(self):
@@ -187,7 +186,8 @@ class ModernUI(QMainWindow):
         
         device_layout.addWidget(QLabel("相机:"), 0, 0)
         self.combo_camera = QComboBox()
-        self.combo_camera.addItems(["IDS", "Ham", "Lucid", "PM", "Simulated"])
+        # 根据您提供的驱动文件添加对应选项
+        self.combo_camera.addItems(["IDS", "Ham", "Lucid", "PM", "IDS_Peak", "Simulated"])
         self.setup_combo_centered(self.combo_camera)
         device_layout.addWidget(self.combo_camera, 0, 1)
         
@@ -196,7 +196,7 @@ class ModernUI(QMainWindow):
         
         device_layout.addWidget(QLabel("平台:"), 1, 0)
         self.combo_stage = QComboBox()
-        self.combo_stage.addItems(["SmartAct", "NewPort", "Nators", "Simulated"])
+        self.combo_stage.addItems(["SmartAct", "NewPort (XPS)", "Nators", "Simulated"])
         self.setup_combo_centered(self.combo_stage)
         device_layout.addWidget(self.combo_stage, 1, 1)
         
@@ -278,7 +278,7 @@ class ModernUI(QMainWindow):
         
         # 模式
         self.combo_scan_mode = QComboBox()
-        self.combo_scan_mode.addItems(["矩形", "圆形", "螺旋"])
+        self.combo_scan_mode.addItems(["矩形", "圆形", "螺旋", "fermat"]) # 对应 Scanner.py 的模式
         self.setup_combo_centered(self.combo_scan_mode)
         form.addRow("模式:", self.combo_scan_mode)
 
@@ -290,9 +290,9 @@ class ModernUI(QMainWindow):
         form.addRow("步长(mm):", self.scan_step)
         
         self.scan_points = QSpinBox(); self.scan_points.setRange(1, 10000); self.scan_points.setValue(100); self.scan_points.setAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("点数:", self.scan_points)
+        form.addRow("点数(Fermat/Round):", self.scan_points)
         
-        self.btn_show_path = QPushButton("显示路径")
+        self.btn_show_path = QPushButton("显示/更新扫描路径")
         form.addRow(self.btn_show_path) 
         
         group.setLayout(form)
