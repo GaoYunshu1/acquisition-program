@@ -345,8 +345,8 @@ class ModernUI(QMainWindow):
         layout.addWidget(self.btn_save, 0, 2)
         
         aux = QHBoxLayout()
-        self.chk_log = QCheckBox("Log显示")
-        self.chk_mask = QCheckBox("Mask遮罩")
+        self.chk_log = QCheckBox("Log")
+        self.chk_mask = QCheckBox("Mask")
         aux.addWidget(self.chk_log)
         aux.addWidget(self.chk_mask)
         layout.addLayout(aux, 1, 0, 1, 3)

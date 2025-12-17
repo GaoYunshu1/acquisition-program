@@ -274,5 +274,4 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = LogicWindow()
     window.show()
-    # PyQt6 必须使用 app.exec() 而不是 app.exec_()
     sys.exit(app.exec())
