@@ -22,9 +22,9 @@ class StageControlWidget(QWidget):
         # --- A. 实时坐标显示 ---
         pos_layout = QHBoxLayout()
         self.lbl_x = QLabel("X: 0.000 mm")
-        self.lbl_x.setStyleSheet("font-weight: bold; font-size: 14px; color: #333;")
+        self.lbl_x.setStyleSheet("font-weight: bold; font-size: 14px; color: #007BFF;")
         self.lbl_y = QLabel("Y: 0.000 mm")
-        self.lbl_y.setStyleSheet("font-weight: bold; font-size: 14px; color: #333;")
+        self.lbl_y.setStyleSheet("font-weight: bold; font-size: 14px; color: #007BFF;")
         
         # 暴露归零按钮
         self.btn_zero = QPushButton("归零")
@@ -116,7 +116,7 @@ class StageControlWidget(QWidget):
 class ModernUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("采集控制系统 v6.0 (PyQt6)")
+        self.setWindowTitle("采集控制系统 v6.1 (PyQt6)")
         self.resize(1280, 950)
 
         central_widget = QWidget()
@@ -165,7 +165,7 @@ class ModernUI(QMainWindow):
         main_layout.addWidget(self.image_area)   
         main_layout.addWidget(self.right_panel)  
 
-    # 辅助函数：设置 ComboBox 居中 (PyQt6)
+    # 辅助函数：设置 ComboBox 居中
     def setup_combo_centered(self, combo):
         combo.setEditable(True)
         combo.lineEdit().setReadOnly(True)
@@ -186,7 +186,6 @@ class ModernUI(QMainWindow):
         
         device_layout.addWidget(QLabel("相机:"), 0, 0)
         self.combo_camera = QComboBox()
-        # 根据您提供的驱动文件添加对应选项
         self.combo_camera.addItems(["IDS", "Ham", "Lucid", "PM", "IDS_Peak", "Simulated"])
         self.setup_combo_centered(self.combo_camera)
         device_layout.addWidget(self.combo_camera, 0, 1)
@@ -278,7 +277,7 @@ class ModernUI(QMainWindow):
         
         # 模式
         self.combo_scan_mode = QComboBox()
-        self.combo_scan_mode.addItems(["矩形", "圆形", "螺旋", "fermat"]) # 对应 Scanner.py 的模式
+        self.combo_scan_mode.addItems(["矩形", "圆形", "螺旋", "fermat"])
         self.setup_combo_centered(self.combo_scan_mode)
         form.addRow("模式:", self.combo_scan_mode)
 
@@ -293,7 +292,17 @@ class ModernUI(QMainWindow):
         form.addRow("点数(Fermat/Round):", self.scan_points)
         
         self.btn_show_path = QPushButton("显示/更新扫描路径")
-        form.addRow(self.btn_show_path) 
+        form.addRow(self.btn_show_path)
+        
+        # 【新增】用于显示路径预览的标签，放在按钮下方
+        self.lbl_scan_preview = QLabel("路径预览区域")
+        self.lbl_scan_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_scan_preview.setMinimumHeight(250) # 设置最小高度
+        self.lbl_scan_preview.setStyleSheet("border: 1px dashed #aaa; background-color: #f9f9f9;")
+        self.lbl_scan_preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
+        # 将预览图添加到布局中
+        form.addRow(self.lbl_scan_preview)
         
         group.setLayout(form)
         layout.addWidget(group)
