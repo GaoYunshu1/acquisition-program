@@ -16,15 +16,8 @@ from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QThread
 from gui_generate import ModernUI
 
 # 尝试导入硬件驱动
-
-from camera import IDS, Ham
-from VSY import VSyCamera as vsy
 from motion_controller import xps, smartact, nators
-from Scanner import Scanner as scan
-from lucid import LucidCamera
-from photometrics import PyVCAM
-from peak import IDSPeakCamera
-    
+from Scanner import Scanner
 
 # =========================================================
 #  硬件加载线程 (解决连接慢的问题)
@@ -63,6 +56,10 @@ class DeviceLoader(QThread):
                     from peak import IDSPeakCamera
                     device_instance = IDSPeakCamera()
                     device_instance.start_acquisition()
+                elif self.device_name == "PI-mte3":
+                    from pi_camera import PICamera                        
+                    device_instance = PICamera()
+                    device_instance.start_acquisition()
 
             elif self.device_type == 'stage':
                 if self.device_name == "Simulated":
@@ -71,6 +68,7 @@ class DeviceLoader(QThread):
                     from motion_controller import smartact
                     device_instance = smartact()
                 elif self.device_name == "NewPort (XPS)":
+                    # 这里的名字要和 UI 里的 addItems 对应
                     from motion_controller import xps
                     device_instance = xps()
                     device_instance.init_groups(['Group3', 'Group4'])
@@ -78,6 +76,11 @@ class DeviceLoader(QThread):
                     from motion_controller import nators
                     device_instance = nators()
                     device_instance.open_system()
+                # 兼容 gui_generate.py 中写的 "NewPort" 简写
+                elif self.device_name == "NewPort":
+                    from motion_controller import xps
+                    device_instance = xps()
+                    device_instance.init_groups(['Group3', 'Group4'])
 
             if device_instance:
                 self.finished_signal.emit(True, device_instance)
@@ -118,18 +121,14 @@ class InteractiveImageView(QGraphicsView):
         self.setMouseTracking(True) 
         self.setStyleSheet("background: #000; border: 0px;")
         
-        # 十字线项
         self.v_line = None
         self.h_line = None
 
     def update_image(self, image_data, show_mask=False):
-        """
-        更新图像并根据 show_mask 决定是否绘制十字线
-        """
         self.np_img = image_data
         
-        # 1. 图像数据转换
         if image_data.dtype == np.uint16:
+            # 简单压缩用于显示
             display_data = (image_data / 16).astype(np.uint8) 
         else:
             display_data = image_data.astype(np.uint8)
@@ -139,29 +138,25 @@ class InteractiveImageView(QGraphicsView):
         qimg = QImage(display_data.data, w, h, bytes_per_line, QImage.Format.Format_Grayscale8)
         pix = QPixmap.fromImage(qimg)
 
-        # 2. 显示图像
         if self.pixmap_item is None:
             self.pixmap_item = self.scene.addPixmap(pix)
         else:
             self.pixmap_item.setPixmap(pix)
         
-        # 3. 处理 Mask (十字线)
+        # 处理 Mask (十字线)
         if show_mask:
             cx, cy = w / 2, h / 2
-            pen = QPen(QColor("lime"), 1) # 亮绿色，宽度1
+            pen = QPen(QColor("lime"), 1)
             
-            # 如果线不存在，创建线
             if self.v_line is None:
                 self.v_line = self.scene.addLine(cx, 0, cx, h, pen)
                 self.h_line = self.scene.addLine(0, cy, w, cy, pen)
             else:
-                # 更新位置（万一图像尺寸变了）
                 self.v_line.setLine(cx, 0, cx, h)
                 self.h_line.setLine(0, cy, w, cy)
                 self.v_line.setVisible(True)
                 self.h_line.setVisible(True)
         else:
-            # 隐藏线
             if self.v_line:
                 self.v_line.setVisible(False)
                 self.h_line.setVisible(False)
@@ -223,6 +218,7 @@ class LogicWindow(ModernUI):
         self.btn_browse.clicked.connect(self.select_folder)
         self.btn_show_path.clicked.connect(self.preview_scan_path)
 
+        # 位移台
         self.stage_widget.btn_up.clicked.connect(lambda: self.move_stage_manual('Y', 1))
         self.stage_widget.btn_down.clicked.connect(lambda: self.move_stage_manual('Y', -1))
         self.stage_widget.btn_left.clicked.connect(lambda: self.move_stage_manual('X', -1))
@@ -230,6 +226,7 @@ class LogicWindow(ModernUI):
         self.stage_widget.btn_go.clicked.connect(self.move_stage_absolute)
         self.stage_widget.btn_zero.clicked.connect(self.zero_stage)
 
+        # ROI & Exposure
         self.btn_center.clicked.connect(self.calculate_center)
         self.exposure_spin.valueChanged.connect(self.set_exposure_time)
 

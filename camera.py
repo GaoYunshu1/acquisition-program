@@ -1,8 +1,5 @@
 from PIL import Image
 from pyueye import ueye
-# import cv2
-from PyQt5 import QtGui
-from PyQt5.QtGui import QImage, QImageReader
 import numpy as np
 from pylablib.devices import uc480, DCAM
 from abc import ABC, abstractmethod
@@ -349,13 +346,16 @@ class IC4Camera(Camera):
 
         return 0.0
 
-
+class piCamera(Camera):
+    def __init__(self):
+        super().__init__()
+        self.cam = PICamera()
 
 
 if __name__ == '__main__':
     # camera = Camera()
     # camera.set_paramerters()
-    cam = Ham()
+    cam = piCamera()
     cam.start_acquisition()
     cam.set_ex_time(5/1000)
     time.sleep(1)

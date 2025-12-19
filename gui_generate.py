@@ -46,10 +46,10 @@ class StageControlWidget(QWidget):
         joystick_layout.setContentsMargins(0,0,0,0)
         
         # 使用不带空格的字符，配合 setFixedSize 保证正方形
-        self.btn_up = self.create_dir_btn("▲", "Y", 1)
-        self.btn_down = self.create_dir_btn("▼", "Y", -1)
-        self.btn_left = self.create_dir_btn("◀", "X", -1)
-        self.btn_right = self.create_dir_btn("▶", "X", 1)
+        self.btn_up = self.create_dir_btn("^", "Y", 1)
+        self.btn_down = self.create_dir_btn("v", "Y", -1)
+        self.btn_left = self.create_dir_btn("<", "X", -1)
+        self.btn_right = self.create_dir_btn(">", "X", 1)
         
         joystick_layout.addWidget(self.btn_up, 0, 1)
         joystick_layout.addWidget(self.btn_left, 1, 0)
@@ -186,7 +186,7 @@ class ModernUI(QMainWindow):
         
         device_layout.addWidget(QLabel("相机:"), 0, 0)
         self.combo_camera = QComboBox()
-        self.combo_camera.addItems(["IDS", "Ham", "Lucid", "PM", "IDS_Peak", "Simulated"])
+        self.combo_camera.addItems(["IDS", "Ham", "Lucid", "PM", "IDS_Peak","PI-mte3"])
         self.setup_combo_centered(self.combo_camera)
         device_layout.addWidget(self.combo_camera, 0, 1)
         
@@ -195,7 +195,7 @@ class ModernUI(QMainWindow):
         
         device_layout.addWidget(QLabel("平台:"), 1, 0)
         self.combo_stage = QComboBox()
-        self.combo_stage.addItems(["SmartAct", "NewPort (XPS)", "Nators", "Simulated"])
+        self.combo_stage.addItems(["NewPort", "SmartAct", "Nators", "Simulated"])
         self.setup_combo_centered(self.combo_stage)
         device_layout.addWidget(self.combo_stage, 1, 1)
         
