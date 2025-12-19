@@ -1,3 +1,4 @@
+
 # from PIL import Image
 # from pyueye import ueye
 # # import cv2
@@ -349,13 +350,18 @@ class Basler(Camera):
 
 #         return 0.0
 
-
+class piCamera(Camera):
+    def __init__(self):
+        super().__init__()
+        self.cam = PICamera()
 
 
 if __name__ == '__main__':
     # camera = Camera()
     # camera.set_paramerters()
+
     cam = IDS()
+
     cam.start_acquisition()
     cam.set_ex_time(5/1000)
     time.sleep(1)

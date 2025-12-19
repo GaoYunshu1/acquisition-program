@@ -18,6 +18,7 @@ from PIL import Image
 from Scanner import Scanner
 from copy import copy, deepcopy
 from typing import Union, List, Tuple
+from pi_camera import PICamera
 
 
 class MainWindow(QMainWindow):
