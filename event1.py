@@ -6,6 +6,7 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+import traceback
 
 # PyQt6 导入
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QVBoxLayout, QFileDialog
@@ -16,7 +17,7 @@ from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QThread
 from gui_generate import ModernUI
 
 # =========================================================
-#  硬件加载线程 (修改：增加了模拟相机的位深接口)
+#  硬件加载线程
 # =========================================================
 class DeviceLoader(QThread):
     finished_signal = pyqtSignal(bool, object)
@@ -30,9 +31,7 @@ class DeviceLoader(QThread):
         try:
             device_instance = None
             if self.device_type == 'camera':
-                if self.device_name == "Simulated":
-                    device_instance = self._init_simulated_camera()
-                elif self.device_name == "IDS":
+                if self.device_name == "IDS":
                     from camera import IDS
                     device_instance = IDS()
                     device_instance.start_acquisition()
@@ -58,9 +57,7 @@ class DeviceLoader(QThread):
                     device_instance.start_acquisition()
 
             elif self.device_type == 'stage':
-                if self.device_name == "Simulated":
-                    device_instance = self._init_simulated_stage()
-                elif self.device_name == "SmartAct":
+                if self.device_name == "SmartAct":
                     from motion_controller import smartact
                     device_instance = smartact()
                 elif self.device_name == "NewPort":
@@ -80,33 +77,11 @@ class DeviceLoader(QThread):
         except Exception as e:
             self.finished_signal.emit(False, str(e))
 
-    def _init_simulated_camera(self):
-        class SimCam:
-            def read_newest_image(self):
-                # 模拟 2048x2048 传感器, 12-bit
-                img = np.random.randint(0, 100, (2048, 2048), dtype=np.uint16)
-                # 在偏离中心的位置加一个亮斑
-                img[800:1000, 1200:1400] += 3000 
-                return img
-            def set_ex_time(self, t): pass
-            
-            # 【新增】模拟获取位深
-            def get_bit_depth(self):
-                return 12 
-        return SimCam()
-
-    def _init_simulated_stage(self):
-        class SimMotion:
-            def move_by(self, dist, axis): pass
-            def move_to(self, pos, axis): pass
-        return SimMotion()
-
-
 # =========================================================
-#  自定义图像显示控件 (修改：移除实时信号，改为被动查询)
+#  自定义图像显示控件
 # =========================================================
 class InteractiveImageView(QGraphicsView):
-    # 移除了 mouse_hover_signal，改为由外部定时器查询
+    mouse_hover_signal = pyqtSignal(int, int, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -117,20 +92,17 @@ class InteractiveImageView(QGraphicsView):
         self.setMouseTracking(True) 
         self.setStyleSheet("background: #000; border: 0px;")
         
-        # 内部记录当前鼠标在 Image 坐标系下的位置
         self.curr_img_x = -1
         self.curr_img_y = -1
-        
-        # Mask 线条对象
+
         self.v_line = None
         self.h_line = None
 
     def update_image(self, image_data, show_mask=False):
         self.np_img = image_data
         
-        # 1. 格式转换
         if image_data.dtype == np.uint16:
-            # 简单可视化压缩
+            # 简单压缩用于显示
             display_data = (image_data / 16).astype(np.uint8) 
         else:
             display_data = image_data.astype(np.uint8)
@@ -140,21 +112,23 @@ class InteractiveImageView(QGraphicsView):
         qimg = QImage(display_data.data, w, h, bytes_per_line, QImage.Format.Format_Grayscale8)
         pix = QPixmap.fromImage(qimg)
 
-        # 2. 更新 Pixmap
         if self.pixmap_item is None:
             self.pixmap_item = self.scene.addPixmap(pix)
+            self.pixmap_item.setZValue(0)
         else:
             self.pixmap_item.setPixmap(pix)
         
-        # 3. 绘制/更新 Mask 十字线
+        # 处理 Mask (十字线)
         if show_mask:
             cx, cy = w / 2, h / 2
-            pen = QPen(QColor("#00FF00"), 1)
-            pen.setStyle(Qt.PenStyle.DashLine) 
+            pen = QPen(QColor("lime"), 1)
+            pen.setStyle(Qt.PenStyle.DashLine)
             
             if self.v_line is None:
                 self.v_line = self.scene.addLine(cx, 0, cx, h, pen)
                 self.h_line = self.scene.addLine(0, cy, w, cy, pen)
+                self.v_line.setZValue(1)
+                self.h_line.setZValue(1)
             else:
                 self.v_line.setLine(cx, 0, cx, h)
                 self.h_line.setLine(0, cy, w, cy)
@@ -168,9 +142,6 @@ class InteractiveImageView(QGraphicsView):
         self.fitInView(self.pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
 
     def mouseMoveEvent(self, event):
-        """
-        仅更新坐标缓存，不发射信号，极大降低 CPU 占用
-        """
         if self.np_img is not None and self.pixmap_item is not None:
             scene_pos = self.mapToScene(event.pos())
             item_pos = self.pixmap_item.mapFromScene(scene_pos)
@@ -178,23 +149,11 @@ class InteractiveImageView(QGraphicsView):
 
             h, w = self.np_img.shape
             if 0 <= x < w and 0 <= y < h:
-                self.curr_img_x = x
-                self.curr_img_y = y
+                val = self.np_img[y, x]
+                self.mouse_hover_signal.emit(x, y, val)
             else:
-                self.curr_img_x = -1
-                self.curr_img_y = -1
+                self.mouse_hover_signal.emit(-1, -1, 0)
         super().mouseMoveEvent(event)
-
-    def get_current_pixel_info(self):
-        """供外部定时器调用的接口"""
-        if self.np_img is None: return -1, -1, 0
-        
-        x, y = self.curr_img_x, self.curr_img_y
-        if x >= 0:
-            val = self.np_img[y, x]
-            return x, y, val
-        return -1, -1, 0
-
 
 # =========================================================
 #  主逻辑窗口
@@ -202,6 +161,7 @@ class InteractiveImageView(QGraphicsView):
 class LogicWindow(ModernUI):
     def __init__(self):
         super().__init__()
+        sys.excepthook = self.handle_exception
         
         # --- 1. 替换图像控件 ---
         old_layout = self.image_area.layout()
@@ -214,7 +174,6 @@ class LogicWindow(ModernUI):
             
         self.image_view = InteractiveImageView()
         old_layout.addWidget(self.image_view)
-        # 注意：这里不再连接 mouse_hover_signal
 
         # --- 2. 内部变量 ---
         self.camera = None
@@ -232,13 +191,6 @@ class LogicWindow(ModernUI):
         self.mouse_info_timer.start()
 
         self.save_dir = "data"
-        self.scanner = None
-        
-        # 相机参数
-        self.saturation_value = 65535 # 默认 16bit，后续会自动读取
-
-        # 软件维护的绝对坐标
-        self.stage_pos = {'x': 0.0, 'y': 0.0}
 
         # --- 3. 信号绑定 ---
         self.btn_open_cam.clicked.connect(self.start_init_camera)
@@ -261,6 +213,33 @@ class LogicWindow(ModernUI):
         # 辅助功能
         self.btn_center.clicked.connect(self.calculate_center)
         self.exposure_spin.valueChanged.connect(self.set_exposure_time)
+
+    def handle_exception(self, exc_type, exc_value, exc_traceback):
+        """
+        全局异常捕获函数：
+        当发生未捕获的异常时，自动触发此函数
+        """
+        # 如果是键盘中断 (Ctrl+C)，则交给系统默认处理，方便开发时强制结束
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+
+        # 1. 获取完整的错误堆栈字符串
+        error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        
+        # 2. 依然打印到控制台 (方便开发者在 IDE 调试)
+        print(error_msg, file=sys.stderr)
+        
+        # 3. 显示到界面日志 (使用红色高亮)
+        # 使用 HTML 格式让报错更显眼
+        header = f"⛔ 【系统崩溃/错误】 {exc_type.__name__}: {exc_value}"
+        self.log_html(f"<font color='#FF4444'><b>{header}</b><br><pre>{error_msg}</pre></font>")
+
+    def log_html(self, html_msg):
+        """辅助函数：支持 HTML 格式的日志插入"""
+        self.txt_log.append(html_msg)
+        # 自动滚动到底部
+        self.txt_log.verticalScrollBar().setValue(self.txt_log.verticalScrollBar().maximum())
 
     def update_mouse_display_throttled(self):
         """【新增】每0.1秒调用一次，从 View 获取数据更新 UI"""
@@ -291,21 +270,29 @@ class LogicWindow(ModernUI):
         if success:
             self.camera = result
             self.btn_open_cam.setText("已就绪")
-            self.btn_open_cam.setStyleSheet("background-color: #a0d468")
             
-            # 【新增】读取位深并计算饱和值
-            bit_depth = 16 # 默认防守值
+            # [修改点]：在这里插入读取位深的逻辑
+            # [标准逻辑]：初始化成功后，立即查询设备属性
+            
+            bit_depth = 16 # 默认值，作为防守编程
+            
+            # 1. 尝试通过标准接口获取
             if hasattr(self.camera, "get_bit_depth"):
                 try:
                     bit_depth = self.camera.get_bit_depth()
                 except:
                     pass
-            elif hasattr(self.camera, "BitDepth"): # 兼容部分属性直接访问
-                 bit_depth = self.camera.BitDepth
-            
+            # 2. 或者尝试直接读取属性 (很多SDK如 IDS, Hamamatsu 可能是属性)
+            elif hasattr(self.camera, "BitDepth"):
+                bit_depth = self.camera.BitDepth
+                
+            # 3. 计算饱和值 (2的n次方 - 1)
             self.saturation_value = (1 << bit_depth) - 1
+            
+            # 更新界面显示
             self.line_cam_max.setText(f"{self.saturation_value} ({bit_depth}-bit)")
-            self.log(f"相机初始化成功，位深: {bit_depth}, 饱和值: {self.saturation_value}")
+            self.log(f"相机就绪，位深: {bit_depth}, 饱和阈值: {self.saturation_value}")
+            
         else:
             self.log(f"相机错误: {result}")
 
@@ -323,19 +310,58 @@ class LogicWindow(ModernUI):
             self.motion = result
             self.btn_connect_stage.setText("已连接")
             self.log("位移台连接成功")
-            self.zero_stage()
+            
+            # [修改点]：原本这里可能写的是 self.zero_stage()
+            # [标准逻辑]：连接后第一件事是“同步硬件状态”
+            self.sync_hardware_position() 
         else:
             self.log(f"位移台错误: {result}")
+
+    def sync_hardware_position(self):
+        """标准逻辑：读取硬件当前的绝对位置更新到软件"""
+        if not self.motion: return
+        try:
+            # 假设 XPS 驱动有一个获取位置的方法，通常是 GroupPositionCurrentGet
+            # 或者是通用的 get_position(axis_index)
+            # 这里演示通用写法，具体取决于你的 xps.py 封装
+            
+            # 0 代表 X轴, 1 代表 Y轴
+            hw_x = self.motion.get_position(0) 
+            hw_y = self.motion.get_position(1)
+            
+            # 更新软件内的“绝对坐标缓存”
+            self.stage_pos['x'] = float(hw_x)
+            self.stage_pos['y'] = float(hw_y)
+            
+            # 刷新 UI 显示
+            self.update_stage_display()
+            self.log(f"已同步硬件位置: X={hw_x}, Y={hw_y}")
+        except Exception as e:
+            self.log(f"读取硬件位置失败，回退到软件零点: {e}")
+            self.zero_stage()
 
     # --- 图像处理核心逻辑 ---
     def crop_image(self, full_image):
         if full_image is None: return None
         h_full, w_full = full_image.shape
         
-        target_w = self.roi_w.value()
-        target_h = self.roi_h.value()
-        off_x = self.off_x.value()
-        off_y = self.off_y.value()
+        try:
+            target_w = int(self.roi_w.text()) # 假设这是 QLineEdit，如果是 SpinBox 用 .value()
+            target_h = int(self.roi_h.text())
+        except:
+            target_w = 1024
+            target_h = 1024
+
+        if target_w >= w_full and target_h >= h_full:
+            self.log("ROI 大于等于图像尺寸，无需裁剪")
+            return full_image
+
+        try:
+            off_x = int(self.off_x.text())
+            off_y = int(self.off_y.text())
+        except:
+            off_x = 0
+            off_y = 0
         
         center_x = w_full // 2 + off_x
         center_y = h_full // 2 + off_y
@@ -345,6 +371,20 @@ class LogicWindow(ModernUI):
         x2 = x1 + target_w
         y2 = y1 + target_h
         
+        if x1 < 0: 
+            x1 = 0
+            x2 = target_w
+        if y1 < 0:
+            y1 = 0
+            y2 = target_h
+        if x2 > w_full:
+            x2 = w_full
+            x1 = w_full - target_w
+        if y2 > h_full:
+            y2 = h_full
+            y1 = h_full - target_h
+            
+        # 最后的安全检查
         x1 = max(0, x1); y1 = max(0, y1)
         x2 = min(w_full, x2); y2 = min(h_full, y2)
         
@@ -495,30 +535,20 @@ class LogicWindow(ModernUI):
         self.stage_pos['x'] = 0.0
         self.stage_pos['y'] = 0.0
         self.update_stage_display()
-        self.log("坐标已归零 (软件原点)")
+        self.log("坐标已归零")
 
     # --- 扫描相关 (修改：计算点数逻辑) ---
     def preview_scan_path(self):
         try:
             from Scanner import Scanner
             
-            mode_map = {"矩形": "rectangle", "圆形": "round", "螺旋": "fermat"}
+            mode_map = {"矩形", "圆形", "螺旋"}
             mode = mode_map.get(self.combo_scan_mode.currentText(), "round")
             
             # 1. 获取范围 (半径 或 边长)
             r_str = self.scan_range_x.text()
             r_val = float(r_str) if r_str else 1.0
             step = float(self.scan_step.text())
-            
-            # 2. 【核心逻辑修改】计算 scan_num
-            # Scanner.py 中:
-            # - round: radius = step * scan_num
-            # - rectangle: width approx step * scan_num
-            # - fermat: radius = step * scan_num (Scanner.py line 125)
-            # 因此，我们统一反推 scan_num = range / step
-            if step <= 0: step = 0.1
-            calc_scan_num = int(r_val / step)
-            if calc_scan_num < 1: calc_scan_num = 1
             
             self.log(f"计算扫描参数: 范围={r_val}, 步长={step} -> 级数={calc_scan_num}")
 
@@ -586,7 +616,6 @@ class LogicWindow(ModernUI):
         self.save_current_frame(filename=f"scan_{self.scan_idx}.png")
         self.scan_idx += 1
 
-    # ... (其他辅助函数) ...
     def set_exposure_time(self):
         if self.camera:
             val = self.exposure_spin.value()
@@ -600,15 +629,24 @@ class LogicWindow(ModernUI):
             self.save_dir = path
 
     def save_current_frame(self, filename=None):
-        if self.image_view.np_img is not None:
-            if not filename:
-                filename = f"capture_{int(time.time())}.png"
-            path = os.path.join(self.save_dir, filename)
-            if not os.path.exists(self.save_dir): os.makedirs(self.save_dir)
-            
-            img = Image.fromarray(self.crop_image(self.camera.read_newest_image()))
-            img.save(path)
-            self.log(f"Saved: {filename}")
+        if self.camera:
+            # 1. 获取最新图像
+            full_img = self.camera.read_newest_image()
+            if full_img is None: return
+
+            # 2. 【关键】经过 crop_image 处理，应用子图和偏移
+            roi_img = self.crop_image(full_img)
+                
+            if roi_img is not None:
+                if not filename:
+                    filename = f"capture_{int(time.time())}.png"
+                    path = os.path.join(self.save_dir, filename)
+                if not os.path.exists(self.save_dir): os.makedirs(self.save_dir)
+                        
+                # 保存
+                img_pil = Image.fromarray(roi_img)
+                img_pil.save(path)
+                self.log(f"Saved ROI: {filename} ({roi_img.shape})")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

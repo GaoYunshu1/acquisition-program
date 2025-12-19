@@ -147,6 +147,9 @@ class nators(MotionController):
             print(f"在关闭系统时发生错误: {e}")
             return None
 
+    def get_position(self, axis):
+           
+        return self._x if axis == 0 else self._y
     def call_nt_find_systems(self, options=""):
         """查找可用系统并返回系统定位符列表"""
         try:
