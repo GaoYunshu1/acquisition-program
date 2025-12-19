@@ -29,7 +29,6 @@ class StageControlWidget(QWidget):
         # 暴露归零按钮
         self.btn_zero = QPushButton("归零")
         self.btn_zero.setFixedSize(50, 25)
-        
         pos_layout.addWidget(self.lbl_x)
         pos_layout.addSpacing(20)
         pos_layout.addWidget(self.lbl_y)
@@ -71,21 +70,17 @@ class StageControlWidget(QWidget):
         self.step_spin.setAlignment(Qt.AlignmentFlag.AlignRight)
         param_layout.addRow("点动步长:", self.step_spin)
 
-        # 绝对移动 X (QDoubleSpinBox, 右对齐)
-        self.target_x = QDoubleSpinBox()
-        self.target_x.setRange(-1000, 1000)
-        self.target_x.setDecimals(3)
+        # 绝对移动 X (QLineEdit, 右对齐)
+        self.target_x = QLineEdit()
         self.target_x.setAlignment(Qt.AlignmentFlag.AlignRight)
         param_layout.addRow("X:", self.target_x)
 
-        # 绝对移动 Y (QDoubleSpinBox, 右对齐)
-        self.target_y = QDoubleSpinBox()
-        self.target_y.setRange(-1000, 1000)
-        self.target_y.setDecimals(3)
+        # 绝对移动 Y (QLineEdit, 右对齐)
+        self.target_y = QLineEdit()
         self.target_y.setAlignment(Qt.AlignmentFlag.AlignRight)
         param_layout.addRow("Y:", self.target_y)
         
-        self.btn_go = QPushButton("移动到坐标 (Go)")
+        self.btn_go = QPushButton("移动到目标位置")
         param_layout.addRow(self.btn_go)
         
         move_container.addLayout(param_layout)
@@ -116,7 +111,7 @@ class StageControlWidget(QWidget):
 class ModernUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("采集控制系统 v6.1 (PyQt6)")
+        self.setWindowTitle("采集控制系统")
         self.resize(1280, 950)
 
         central_widget = QWidget()
@@ -193,7 +188,7 @@ class ModernUI(QMainWindow):
         self.btn_open_cam = QPushButton("打开")
         device_layout.addWidget(self.btn_open_cam, 0, 2)
         
-        device_layout.addWidget(QLabel("平台:"), 1, 0)
+        device_layout.addWidget(QLabel("位移台:"), 1, 0)
         self.combo_stage = QComboBox()
         self.combo_stage.addItems(["NewPort", "SmartAct", "Nators", "Simulated"])
         self.setup_combo_centered(self.combo_stage)
@@ -219,12 +214,12 @@ class ModernUI(QMainWindow):
         
         cam_layout.addWidget(QLabel("曝光 (ms):"), 0, 0)
         self.exposure_spin = QDoubleSpinBox()
-        self.exposure_spin.setRange(0.001, 10000); self.exposure_spin.setValue(0.1); self.exposure_spin.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.exposure_spin.setRange(0.001, 10000);self.exposure_spin.setAlignment(Qt.AlignmentFlag.AlignRight)
         cam_layout.addWidget(self.exposure_spin, 0, 1)
         
         cam_layout.addWidget(QLabel("波长 (nm):"), 1, 0)
-        self.wavelength_spin = QDoubleSpinBox()
-        self.wavelength_spin.setRange(200, 2000); self.wavelength_spin.setValue(632.8); self.wavelength_spin.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.wavelength_spin = QLineEdit("632.8")
+        self.wavelength_spin.setAlignment(Qt.AlignmentFlag.AlignRight)
         cam_layout.addWidget(self.wavelength_spin, 1, 1)    
         
         cam_layout.addWidget(QLabel("采样:"), 2, 0)
@@ -236,25 +231,25 @@ class ModernUI(QMainWindow):
         cam_group.setLayout(cam_layout)
         layout.addWidget(cam_group)
 
-        # --- D. 阵列与偏移 ---
-        roi_group = QGroupBox("4. 阵列与偏移 (ROI)")
+        # --- D. 采集区域与偏移 ---
+        roi_group = QGroupBox("4. 采集区域与偏移")
         roi_layout = QGridLayout()
         
-        roi_layout.addWidget(QLabel("阵列 W/H:"), 0, 0)
+        roi_layout.addWidget(QLabel("采集区域 W/H:"), 0, 0)
         roi_size = QHBoxLayout()
-        self.roi_w = QSpinBox(); self.roi_w.setRange(1, 4096); self.roi_w.setValue(1024); self.roi_w.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.roi_h = QSpinBox(); self.roi_h.setRange(1, 4096); self.roi_h.setValue(1024); self.roi_h.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.roi_w = QLineEdit("1024");self.roi_w.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.roi_h = QLineEdit("1024");self.roi_h.setAlignment(Qt.AlignmentFlag.AlignRight)
         roi_size.addWidget(self.roi_w); roi_size.addWidget(QLabel("x")); roi_size.addWidget(self.roi_h)
         roi_layout.addLayout(roi_size, 0, 1)
 
         roi_layout.addWidget(QLabel("偏移 X/Y:"), 1, 0)
         offset_layout = QHBoxLayout()
-        self.off_x = QSpinBox(); self.off_x.setRange(-2000, 2000); self.off_x.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.off_y = QSpinBox(); self.off_y.setRange(-2000, 2000); self.off_y.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.off_x = QLineEdit("0");self.off_x.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.off_y = QLineEdit("0");self.off_y.setAlignment(Qt.AlignmentFlag.AlignRight)
         offset_layout.addWidget(self.off_x); offset_layout.addWidget(self.off_y)
         roi_layout.addLayout(offset_layout, 1, 1)
         
-        self.btn_center = QPushButton("获取中心并计算偏移")
+        self.btn_center = QPushButton("获取采集区域中心")
         roi_layout.addWidget(self.btn_center, 2, 0, 1, 2)
         
         roi_group.setLayout(roi_layout)
@@ -277,19 +272,25 @@ class ModernUI(QMainWindow):
         
         # 模式
         self.combo_scan_mode = QComboBox()
-        self.combo_scan_mode.addItems(["矩形", "圆形", "螺旋", "fermat"])
+        self.combo_scan_mode.addItems(["矩形", "圆形", "螺旋"])
         self.setup_combo_centered(self.combo_scan_mode)
         form.addRow("模式:", self.combo_scan_mode)
 
         # 参数 (右对齐)
-        self.scan_range = QLineEdit("0.2, 0.2"); self.scan_range.setAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("范围(mm):", self.scan_range)
+        self.scan_range_x = QLineEdit("0.2")
+        self.scan_range_y = QLineEdit("0.2")
+        self.scan_range_x.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.scan_range_y.setAlignment(Qt.AlignmentFlag.AlignRight)
+        h_range = QHBoxLayout()
+        h_range.addWidget(self.scan_range_x)
+        h_range.addWidget(self.scan_range_y)    
+        form.addRow("范围(mm):", h_range)
         
-        self.scan_step = QLineEdit("0.1"); self.scan_step.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.scan_step = QLineEdit("0.1"); self.scan_step.setAlignment(Qt.AlignmentFlag.AlignRight  )
         form.addRow("步长(mm):", self.scan_step)
         
-        self.scan_points = QSpinBox(); self.scan_points.setRange(1, 10000); self.scan_points.setValue(100); self.scan_points.setAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("点数(Fermat/Round):", self.scan_points)
+        self.scan_points = QLineEdit(); self.scan_points.setAlignment(Qt.AlignmentFlag.AlignRight)
+        form.addRow("采集点数:", self.scan_points)
         
         self.btn_show_path = QPushButton("显示/更新扫描路径")
         form.addRow(self.btn_show_path)
@@ -313,18 +314,16 @@ class ModernUI(QMainWindow):
         layout = QFormLayout()
         layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self.line_cam_max = QLineEdit("65535") 
+        self.line_cam_max = QLabel() 
         self.line_cam_max.setAlignment(Qt.AlignmentFlag.AlignRight)
         layout.addRow("相机饱和:", self.line_cam_max)
 
-        self.line_global_max = QLineEdit("0")
-        self.line_global_max.setReadOnly(True)
+        self.line_global_max = QLabel("0")
         self.line_global_max.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.line_global_max.setStyleSheet("color: red; font-weight: bold; background: #f0f0f0;")
         layout.addRow("全图Max:", self.line_global_max)
 
-        self.line_mouse_val = QLineEdit("0")
-        self.line_mouse_val.setReadOnly(True)
+        self.line_mouse_val = QLabel("0")
         self.line_mouse_val.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.line_mouse_val.setStyleSheet("color: blue; font-weight: bold; background: #f0f0f0;")
         layout.addRow("鼠标Val:", self.line_mouse_val)
@@ -337,7 +336,7 @@ class ModernUI(QMainWindow):
         layout = QGridLayout(container)
         layout.setContentsMargins(0, 5, 0, 5)
         
-        self.btn_live = QPushButton("👁 观察")
+        self.btn_live = QPushButton("👁 启动")
         self.btn_live.setMinimumHeight(45)
         self.btn_live.setStyleSheet("background-color: #27ae60; color: white; border-radius: 5px; font-weight: bold;")
 
