@@ -17,9 +17,9 @@ from camera import IDS, Ham
 from VSY import VSyCamera as vsy
 from motion_controller import xps, smartact, nators
 from Scanner import Scanner, visualize_scan_path 
-from lucid import LucidCamera
-from photometrics import PyVCAM
-from peak import IDSPeakCamera
+# from lucid import LucidCamera
+# from photometrics import PyVCAM
+# from peak import IDSPeakCamera
 
 # =========================================
 # 自定义图像显示控件 (PyQt6)
@@ -140,6 +140,7 @@ class LogicWindow(ModernUI):
             elif cam_name == "IDS":
                 self.camera = IDS()
                 self.camera.start_acquisition()
+                self.camera.set_pixel_rate(7e7)
             elif cam_name == "Ham":
                 self.camera = Ham()
                 self.camera.start_acquisition()
@@ -190,7 +191,7 @@ class LogicWindow(ModernUI):
             if stage_name == "SmartAct":
                 self.motion = smartact()
             elif stage_name == "NewPort (XPS)":
-                self.motion = xps()
+                self.motion = xps(IP='192.168.0.254')
                 self.motion.init_groups(['Group3', 'Group4']) # 根据实际情况调整
             elif stage_name == "Nators":
                 self.motion = nators()

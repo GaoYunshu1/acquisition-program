@@ -1,12 +1,12 @@
-from PIL import Image
-from pyueye import ueye
-# import cv2
-from PyQt5 import QtGui
-from PyQt5.QtGui import QImage, QImageReader
+# from PIL import Image
+# from pyueye import ueye
+# # import cv2
+# from PyQt5 import QtGui
+# from PyQt5.QtGui import QImage, QImageReader
 import numpy as np
 from pylablib.devices import uc480, DCAM
 from abc import ABC, abstractmethod
-import imagingcontrol4 as ic4
+# import imagingcontrol4 as ic4
 import time
 
 class Camera(ABC):
@@ -243,111 +243,111 @@ class Basler(Camera):
         print("相机已关闭")
 
 
-class IC4Camera(Camera):
-    class _NumpyCaptureListener(ic4.QueueSinkListener):
-        def __init__(self):
-            self.latest_frame = None
+# class IC4Camera(Camera):
+#     class _NumpyCaptureListener(ic4.QueueSinkListener):
+#         def __init__(self):
+#             self.latest_frame = None
 
-        def sink_connected(self, sink: ic4.QueueSink, image_type: ic4.ImageType, min_buffers_required: int) -> bool:
-            return True
+#         def sink_connected(self, sink: ic4.QueueSink, image_type: ic4.ImageType, min_buffers_required: int) -> bool:
+#             return True
 
-        def frames_queued(self, sink: ic4.QueueSink):
-            try:
-                buffer = sink.pop_output_buffer()
-                np_array = buffer.numpy_wrap()
-                self.latest_frame = np_array.copy()
+#         def frames_queued(self, sink: ic4.QueueSink):
+#             try:
+#                 buffer = sink.pop_output_buffer()
+#                 np_array = buffer.numpy_wrap()
+#                 self.latest_frame = np_array.copy()
 
-            except Exception as e:
-                print(f"帧处理异常: {str(e)}")
+#             except Exception as e:
+#                 print(f"帧处理异常: {str(e)}")
 
-    def __init__(self, width, height):
+#     def __init__(self, width, height):
 
-        super().__init__()
-        self.grabber = None
-        self.listener = None
-        self.sink = None
-        self._last_frame = None
-        self._timestamps = []
-        self._initialize(width, height)
+#         super().__init__()
+#         self.grabber = None
+#         self.listener = None
+#         self.sink = None
+#         self._last_frame = None
+#         self._timestamps = []
+#         self._initialize(width, height)
 
-    def _initialize(self, width, height):
-        try:
-            ic4.Library.init()
-            device_list = ic4.DeviceEnum.devices()
-            if not device_list:
-                raise RuntimeError("未检测到可用相机设备")
+#     def _initialize(self, width, height):
+#         try:
+#             ic4.Library.init()
+#             device_list = ic4.DeviceEnum.devices()
+#             if not device_list:
+#                 raise RuntimeError("未检测到可用相机设备")
 
-            self.dev_info = device_list[0]
-            print(self.dev_info)
+#             self.dev_info = device_list[0]
+#             print(self.dev_info)
 
-            self.grabber = ic4.Grabber()
+#             self.grabber = ic4.Grabber()
 
-            self.grabber.device_open(self.dev_info)
-            self.grabber.device_property_map.set_value(ic4.PropId.PIXEL_FORMAT, ic4.PixelFormat.Mono16)
-
-
-
-            self.grabber.device_property_map.set_value(ic4.PropId.WIDTH, width)
-            self.grabber.device_property_map.set_value(ic4.PropId.HEIGHT, height)
-
-            self.listener = self._NumpyCaptureListener()
-            self.sink = ic4.QueueSink(
-                self.listener,
-                [ic4.PixelFormat.Mono16],  # 根据实际像素格式调整
-                max_output_buffers=1
-            )
-        except ic4.IC4Exception as e:
-            raise RuntimeError(f"相机初始化失败: {str(e)}") from e
-
-    def _release_resources(self):
-        try:
-            if self.grabber is not None:
-                self.grabber.stream_stop()
-                self.grabber.device_close()
-        except Exception as e:
-            print(f"资源释放异常: {str(e)}")
-
-    def close(self):
-        self._release_resources()
-
-    def set_ex_time(self, ex_time: float):
-        try:
-
-            ex_us = float(ex_time * 1e6)
-            self.grabber.device_property_map.set_value(ic4.PropId.EXPOSURE_AUTO, "Off")
-            self.grabber.device_property_map.set_value(ic4.PropId.EXPOSURE_TIME, ex_us)
-            # self.grabber.device_property_map.set_value(ic4.PropId.EXPOSURE_AUTO, "Off")
-            ex_time = self.grabber.device_property_map.get_value_float(ic4.PropId.EXPOSURE_TIME)
-            print(f"曝光时间已设置为: {ex_time/1000} 毫秒")
-        except (AttributeError, ic4.IC4Exception) as e:
-            raise RuntimeError(f"设置曝光时间失败: {str(e)}") from e
-
-    def start_acquisition(self):
-        """启动图像采集"""
-        try:
-            self.grabber.stream_setup(self.sink)
-            print("图像采集已启动")
-        except ic4.IC4Exception as e:
-            raise RuntimeError(f"启动采集失败: {str(e)}") from e
-
-    def read_newest_image(self) -> np.ndarray:
-
-        try:
-            frame = self.listener.latest_frame.astype(np.uint16)
-            self.listener.latest_frame = None
-            return frame
-        except Exception as e:
-            print(f'IC4获取图像失败{e}')
+#             self.grabber.device_open(self.dev_info)
+#             self.grabber.device_property_map.set_value(ic4.PropId.PIXEL_FORMAT, ic4.PixelFormat.Mono16)
 
 
-    def get_frame_period(self) -> float:
-        try:
-            fps = self.grabber.device_property_map.get_value_float(ic4.PropId.ACQUISITION_FRAME_RATE)
-            return 1.0 / fps if fps > 0 else 0.0
-        except (AttributeError, ic4.IC4Exception):
-            print(ic4.IC4Exception)
 
-        return 0.0
+#             self.grabber.device_property_map.set_value(ic4.PropId.WIDTH, width)
+#             self.grabber.device_property_map.set_value(ic4.PropId.HEIGHT, height)
+
+#             self.listener = self._NumpyCaptureListener()
+#             self.sink = ic4.QueueSink(
+#                 self.listener,
+#                 [ic4.PixelFormat.Mono16],  # 根据实际像素格式调整
+#                 max_output_buffers=1
+#             )
+#         except ic4.IC4Exception as e:
+#             raise RuntimeError(f"相机初始化失败: {str(e)}") from e
+
+#     def _release_resources(self):
+#         try:
+#             if self.grabber is not None:
+#                 self.grabber.stream_stop()
+#                 self.grabber.device_close()
+#         except Exception as e:
+#             print(f"资源释放异常: {str(e)}")
+
+#     def close(self):
+#         self._release_resources()
+
+#     def set_ex_time(self, ex_time: float):
+#         try:
+
+#             ex_us = float(ex_time * 1e6)
+#             self.grabber.device_property_map.set_value(ic4.PropId.EXPOSURE_AUTO, "Off")
+#             self.grabber.device_property_map.set_value(ic4.PropId.EXPOSURE_TIME, ex_us)
+#             # self.grabber.device_property_map.set_value(ic4.PropId.EXPOSURE_AUTO, "Off")
+#             ex_time = self.grabber.device_property_map.get_value_float(ic4.PropId.EXPOSURE_TIME)
+#             print(f"曝光时间已设置为: {ex_time/1000} 毫秒")
+#         except (AttributeError, ic4.IC4Exception) as e:
+#             raise RuntimeError(f"设置曝光时间失败: {str(e)}") from e
+
+#     def start_acquisition(self):
+#         """启动图像采集"""
+#         try:
+#             self.grabber.stream_setup(self.sink)
+#             print("图像采集已启动")
+#         except ic4.IC4Exception as e:
+#             raise RuntimeError(f"启动采集失败: {str(e)}") from e
+
+#     def read_newest_image(self) -> np.ndarray:
+
+#         try:
+#             frame = self.listener.latest_frame.astype(np.uint16)
+#             self.listener.latest_frame = None
+#             return frame
+#         except Exception as e:
+#             print(f'IC4获取图像失败{e}')
+
+
+#     def get_frame_period(self) -> float:
+#         try:
+#             fps = self.grabber.device_property_map.get_value_float(ic4.PropId.ACQUISITION_FRAME_RATE)
+#             return 1.0 / fps if fps > 0 else 0.0
+#         except (AttributeError, ic4.IC4Exception):
+#             print(ic4.IC4Exception)
+
+#         return 0.0
 
 
 
@@ -355,7 +355,7 @@ class IC4Camera(Camera):
 if __name__ == '__main__':
     # camera = Camera()
     # camera.set_paramerters()
-    cam = Ham()
+    cam = IDS()
     cam.start_acquisition()
     cam.set_ex_time(5/1000)
     time.sleep(1)
