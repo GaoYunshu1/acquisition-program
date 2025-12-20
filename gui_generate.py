@@ -370,6 +370,7 @@ class ModernUI(QMainWindow):
 
     def log(self, msg):
         # 可以在普通日志前加个时间戳或者颜色
+        import time
         current_time = time.strftime("%H:%M:%S")
         self.txt_log.append(f"[{current_time}] {msg}")
         self.txt_log.verticalScrollBar().setValue(self.txt_log.verticalScrollBar().maximum())
