@@ -1,6 +1,6 @@
 import numpy as np
 import pylablib as pll
-pll.par["device/dlls/picam"] = "Princeton Instruments/PICam/Runtime/x64/picam.dll"
+# pll.par["device/dlls/picam"] = "Princeton Instruments/PICam/Runtime/x64/picam.dll"
 from pylablib.devices import PrincetonInstruments as pi
 from camera import Camera
 

@@ -9,7 +9,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 import traceback
 
 # PyQt6 导入
-from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QVBoxLayout, QFileDialog
+from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QVBoxLayout, QFileDialog, QMessageBox
 from PyQt6.QtGui import QImage, QPixmap, QPen, QColor
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QThread
 
@@ -183,14 +183,10 @@ class LogicWindow(ModernUI):
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
         self.is_live = False
-        
-        # 【新增】鼠标信息更新定时器 (0.1s = 100ms)
-        self.mouse_info_timer = QTimer()
-        self.mouse_info_timer.setInterval(100) 
-        self.mouse_info_timer.timeout.connect(self.update_mouse_display_throttled)
-        self.mouse_info_timer.start()
-
-        self.save_dir = "data"
+        self.last_mouse_x = 0
+        self.last_mouse_y = 0
+        self.image_view.mouse_hover_signal.connect(self.on_mouse_moved)
+        self.save_dir = "please change this to your own path"
 
         # --- 3. 信号绑定 ---
         self.btn_open_cam.clicked.connect(self.start_init_camera)
@@ -241,20 +237,51 @@ class LogicWindow(ModernUI):
         # 自动滚动到底部
         self.txt_log.verticalScrollBar().setValue(self.txt_log.verticalScrollBar().maximum())
 
-    def update_mouse_display_throttled(self):
-        """【新增】每0.1秒调用一次，从 View 获取数据更新 UI"""
-        x, y, val = self.image_view.get_current_pixel_info()
+    def on_mouse_moved(self, x, y, val):
+        if x >= 0 and y >= 0:
+            self.last_mouse_x = x
+            self.last_mouse_y = y
+            self.update_pixel_display(val)
+
+    def update_pixel_display(self, val):
+        if val is None: return 
         
-        if x >= 0:
-            self.line_mouse_val.setText(f"{val}")
-            # 简单的过曝警示
-            if val >= self.saturation_value:
-                self.line_mouse_val.setStyleSheet("color: red; font-weight: bold; background: #ffeeee;")
-            else:
-                self.line_mouse_val.setStyleSheet("color: blue; font-weight: bold; background: #f0f0f0;")
+        self.line_mouse_val.setText(f"{val}")
+        
+        if val >= self.saturation_value:
+            self.line_mouse_val.setStyleSheet("color: red; font-weight: bold; background: #ffeeee;")
         else:
-            self.line_mouse_val.setText("-")
             self.line_mouse_val.setStyleSheet("color: blue; font-weight: bold; background: #f0f0f0;")
+
+    def update_frame(self):
+        if self.camera:
+            try:
+                # 1. 获取并裁剪图像
+                img = self.camera.read_newest_image()
+                if img is None: return
+                cropped_img = self.crop_image(img)
+                
+                # 2. 更新 View 显示
+                self.image_view.update_image(cropped_img, show_mask)
+
+                # ==========================================
+                # 【新增逻辑】: 图像更新时，刷新鼠标位置的数值
+                # ==========================================
+                h, w = cropped_img.shape
+                
+                # 检查缓存坐标是否还在当前图像范围内 (防止ROI改变导致越界)
+                if 0 <= self.last_mouse_x < w and 0 <= self.last_mouse_y < h:
+                    # 从【新图像】中取出【旧位置】的值
+                    current_val = cropped_img[self.last_mouse_y, self.last_mouse_x]
+                    self.update_pixel_display(current_val)
+                else:
+                    # 如果ROI变小导致坐标失效，重置回中心或0
+                    self.last_mouse_x = w // 2
+                    self.last_mouse_y = h // 2
+            
+            except Exception as e:
+                # self.log(f"Frame Update Error: {e}")
+                pass
 
     # --- 异步加载设备 ---
     def start_init_camera(self):
@@ -271,17 +298,15 @@ class LogicWindow(ModernUI):
             self.camera = result
             self.btn_open_cam.setText("已就绪")
             
-            # [修改点]：在这里插入读取位深的逻辑
-            # [标准逻辑]：初始化成功后，立即查询设备属性
-            
-            bit_depth = 16 # 默认值，作为防守编程
-            
             # 1. 尝试通过标准接口获取
             if hasattr(self.camera, "get_bit_depth"):
                 try:
                     bit_depth = self.camera.get_bit_depth()
                 except:
+                    bit_depth = 16 # 默认值，作为防守编程
+                    self.log(f"Frame Update Error: {e}")
                     pass
+
             # 2. 或者尝试直接读取属性 (很多SDK如 IDS, Hamamatsu 可能是属性)
             elif hasattr(self.camera, "BitDepth"):
                 bit_depth = self.camera.BitDepth
@@ -424,7 +449,7 @@ class LogicWindow(ModernUI):
             return
         if self.is_live:
             self.timer.stop()
-            self.btn_live.setText("👁 观察")
+            self.btn_live.setText("👁 启动")
             self.btn_live.setStyleSheet("background:#27ae60;color:white;font-weight:bold;")
             self.is_live = False
         else:
@@ -537,37 +562,80 @@ class LogicWindow(ModernUI):
         self.update_stage_display()
         self.log("坐标已归零")
 
-    # --- 扫描相关 (修改：计算点数逻辑) ---
     def preview_scan_path(self):
         try:
             from Scanner import Scanner
-            
-            mode_map = {"矩形", "圆形", "螺旋"}
-            mode = mode_map.get(self.combo_scan_mode.currentText(), "round")
-            
-            # 1. 获取范围 (半径 或 边长)
-            r_str = self.scan_range_x.text()
-            r_val = float(r_str) if r_str else 1.0
-            step = float(self.scan_step.text())
-            
-            self.log(f"计算扫描参数: 范围={r_val}, 步长={step} -> 级数={calc_scan_num}")
+            import math # 需要引入math库进行向上取整
 
-            # 3. 生成 Scanner 对象
+            # 1. 修正映射字典 (原代码是集合{}，无法使用.get，必须改为字典映射)
+            mode_map = {
+                "矩形": "rectangle", 
+                "圆形": "round", 
+                "螺旋": "fermat"
+            }
+            # 获取当前选中的模式文本，并映射到英文key
+            ui_mode_text = self.combo_scan_mode.currentText()
+            mode = mode_map.get(ui_mode_text, "round") # 默认 fallback 到 round
+            
+            # 2. 获取范围 (同时获取 X 和 Y)
+            try:
+                rx = float(self.scan_range_x.text())
+            except ValueError: rx = 1.0
+            
+            try:
+                ry = float(self.scan_range_y.text())
+            except ValueError: ry = rx # 如果Y没填或格式错误，默认等于X，保持正方形/正圆
+                
+            try:
+                step = float(self.scan_step.text())
+                if step <= 1e-6: step = 0.1 # 防止步长为0导致除法报错
+            except ValueError:
+                step = 0.1
+
+            # 3. 计算 scan_num
+            calc_scan_num = 10 # 默认值
+            
+            if mode == 'rectangle':
+                # 矩形模式：Scanner 生成的是 scan_num * scan_num 的正方形网格
+                # 为了保证覆盖用户输入的范围，我们取 X 和 Y 中的最大值
+                max_side = max(rx, ry)
+                calc_scan_num = int(math.ceil(max_side / step))
+                self.log(f"参数计算(矩形): Max边长={max_side:.3f}, 步长={step} -> 级数={calc_scan_num}")
+                
+            else:
+                diameter = min(rx, ry) 
+                radius = diameter / 2.0
+                calc_scan_num = int(math.ceil(radius / step))
+                self.log(f"参数计算({ui_mode_text}): 直径={diameter:.3f}, 半径={radius:.3f} -> 级数={calc_scan_num}")
+
+            # 4. 生成 Scanner 对象
             self.scanner = Scanner(step=step, scan_num=calc_scan_num, mode=mode)
             
-            # 4. 更新 UI 上的采集点数显示 (设为只读或更新值)
+            # 5. 更新 UI 上的采集点数显示
             total_points = len(self.scanner.x)
             self.scan_points.setText(str(total_points))
-            self.log(f"生成扫描路径: {mode}, 总点数: {total_points}")
+            self.log(f"生成扫描路径: {ui_mode_text}, 总点数: {total_points}")
 
-            # 5. 绘制预览
+            # 6. 绘制预览
             plt.style.use('default')
             fig, ax = plt.subplots(figsize=(4, 3), dpi=100)
             x_pts = np.array(self.scanner.abs_x)
             y_pts = np.array(self.scanner.abs_y)
+            
+            # 绘制路径连线
             ax.plot(x_pts, y_pts, 'b.-', markersize=2, linewidth=0.5, alpha=0.6)
+            
+            # 绘制用户期望的范围框 (红色虚线)，方便对比实际扫描覆盖情况
+            ax.add_patch(plt.Rectangle((-rx/2, -ry/2), rx, ry, 
+                                     fill=False, edgecolor='r', linestyle='--', label='Set Range'))
+            
             ax.set_aspect('equal')
             ax.grid(True, linestyle=':', alpha=0.5)
+            # 稍微扩大一点视野以便看清边界
+            max_limit = max(rx, ry) / 2.0 * 1.1
+            ax.set_xlim(-max_limit, max_limit)
+            ax.set_ylim(-max_limit, max_limit)
+            
             plt.tight_layout()
 
             buf = io.BytesIO()
@@ -585,11 +653,57 @@ class LogicWindow(ModernUI):
             import traceback
             traceback.print_exc()
 
+    def confirm_directory(self):
+        """
+        弹出确认框，询问用户目录是否正确。
+        返回: True (用户点Yes), False (用户点No)
+        """
+        current_dir = self.save_dir_edit.text()
+        
+        # 1. 如果目录为空，提示错误
+        if not current_dir.strip():
+            QMessageBox.warning(self, "路径错误", "保存目录不能为空！")
+            return False
+
+        # 2. 构造提示文本
+        msg_text = (f"即将保存数据！\n\n"
+                    f"当前保存目录为：\n"
+                    f"【 {current_dir} 】\n\n"
+                    f"请确认目录名称是否正确？")
+        
+        # 3. 弹出对话框
+        reply = QMessageBox.question(
+            self, 
+            "目录检查", 
+            msg_text,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No  # 默认选中 No，防止手滑
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # 确认后，同步更新内部变量，并确保目录存在
+            self.save_dir = current_dir
+            if not os.path.exists(self.save_dir):
+                try:
+                    os.makedirs(self.save_dir)
+                except Exception as e:
+                    QMessageBox.critical(self, "错误", f"无法创建目录：\n{e}")
+                    return False
+            return True
+        else:
+            self.log("操作已取消。")
+            return False
+            
     def start_scan(self):
         # 扫描前强制重新生成一次，确保参数是最新的
         self.preview_scan_path()
-            
-        if not self.scanner: return
+        
+        if not getattr(self, 'scanner', None): 
+            self.log("扫描器未初始化，请先点击'显示/更新扫描路径'")
+            return
+        
+        if not self.confirm_directory():
+            return
         
         self.log(f"开始采集 {len(self.scanner.x)} 点...")
         self.scan_idx = 0
@@ -628,25 +742,38 @@ class LogicWindow(ModernUI):
             self.save_dir_edit.setText(path)
             self.save_dir = path
 
+    def on_manual_save(self):
+        """响应界面上的'保存'按钮点击"""
+        # 1. 先弹窗确认
+        if self.confirm_directory():
+            # 2. 确认通过后，才执行保存
+            self.save_current_frame()
+
     def save_current_frame(self, filename=None):
         if self.camera:
-            # 1. 获取最新图像
-            full_img = self.camera.read_newest_image()
-            if full_img is None: return
+            try:
+                # 1. 获取最新图像
+                full_img = self.camera.read_newest_image()
+                if full_img is None: return
 
-            # 2. 【关键】经过 crop_image 处理，应用子图和偏移
-            roi_img = self.crop_image(full_img)
-                
-            if roi_img is not None:
-                if not filename:
-                    filename = f"capture_{int(time.time())}.png"
-                    path = os.path.join(self.save_dir, filename)
-                if not os.path.exists(self.save_dir): os.makedirs(self.save_dir)
-                        
-                # 保存
-                img_pil = Image.fromarray(roi_img)
-                img_pil.save(path)
-                self.log(f"Saved ROI: {filename} ({roi_img.shape})")
+                # 2. 【关键】经过 crop_image 处理，应用子图和偏移
+                roi_img = self.crop_image(full_img)
+                    
+                if roi_img is not None:
+                    if not filename:
+                        filename = f"capture_{int(time.time())}.png"
+                        path = os.path.join(self.save_dir, filename)
+                    if not os.path.exists(self.save_dir): os.makedirs(self.save_dir)
+                            
+                    # 保存
+                    img_pil = Image.fromarray(roi_img)
+                    img_pil.save(path)
+                    self.log(f"Saved ROI: {filename} ({roi_img.shape})")
+                    
+            except Exception as e:
+                self.log(f"保存当前帧失败: {e}")
+                import traceback
+                traceback.print_exc()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
