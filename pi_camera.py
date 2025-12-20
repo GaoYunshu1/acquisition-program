@@ -40,6 +40,23 @@ class PICamera(Camera):
         except Exception as e:
             print(f"配置相机参数失败: {e}")
 
+    def get_bit_depth(self):
+        """
+        获取相机 ADC 位深
+        返回: int (例如 16)
+        """
+        if self.cam:
+            try:
+                # 尝试直接读取 PICam 底层参数 "AdcBitDepth"
+                # 这比简单的 16-bit 默认值更准确，因为有些 PI 相机支持切换 ADC 模式 (12/16/18 bit)
+                bit_depth = self.cam.get_attribute_value("AdcBitDepth")
+                return int(bit_depth)
+            except Exception as e:
+                print(f"读取位深失败，使用默认值 16: {e}")
+                # PI-MTE3 通常是 16-bit 科学级相机，如果读取失败，默认 16 是最安全的
+                return 16
+        return 16
+        
     def set_ex_time(self, ex_time):
         """
         设置曝光时间

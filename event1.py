@@ -299,23 +299,30 @@ class LogicWindow(ModernUI):
             self.camera = result
             self.btn_open_cam.setText("已就绪")
             
-            # 1. 尝试通过标准接口获取
+            # 0. 先设置默认值 (防止后续逻辑因找不到变量而崩溃)
+            # 科学相机默认 16-bit 比较安全，如果是 8-bit 相机这里没获取到，
+            # 后果只是图像显示比较暗，但不会崩
+            bit_depth = 16 
+            
+            # 1. 策略 A: 尝试调用标准接口 (适用于你修改过的 uc480.py)
             if hasattr(self.camera, "get_bit_depth"):
                 try:
                     bit_depth = self.camera.get_bit_depth()
-                except:
-                    bit_depth = 16 # 默认值，作为防守编程
-                    self.log(f"Frame Update Error: {e}")
-                    pass
+                except Exception as e: # 修正：必须加上 Exception as e
+                    self.log(f"获取位深失败，使用默认值 16: {e}")
 
-            # 2. 或者尝试直接读取属性 (很多SDK如 IDS, Hamamatsu 可能是属性)
+            # 2. 策略 B: 尝试读取属性 (适用于某些简单的 SDK 封装)
             elif hasattr(self.camera, "BitDepth"):
-                bit_depth = self.camera.BitDepth
-                
-            # 3. 计算饱和值 (2的n次方 - 1)
+                try:
+                    bit_depth = int(self.camera.BitDepth)
+                except:
+                    pass
+            
+            # 3. 计算饱和值 (2^n - 1)
+            # 此时 bit_depth 一定有值 (要么是读取到的，要么是默认的16)
             self.saturation_value = (1 << bit_depth) - 1
             
-            # 更新界面显示
+            # 4. 更新界面
             self.line_cam_max.setText(f"{self.saturation_value} ({bit_depth}-bit)")
             self.log(f"相机就绪，位深: {bit_depth}, 饱和阈值: {self.saturation_value}")
             
