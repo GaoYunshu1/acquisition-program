@@ -180,7 +180,6 @@ class LogicWindow(ModernUI):
         self.motion = None
         
         # 实时流定时器
-        self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
         self.is_live = False
         self.last_mouse_x = 0
@@ -394,9 +393,8 @@ class LogicWindow(ModernUI):
                     success = True
 
             if success:
-                self.stage_pos['x'] = hw_x
-                self.stage_pos['y'] = hw_y
-                self.update_stage_display()
+                self.stage_widget.lbl_x.setText(f"X: {hw_x:.3f} mm")
+                self.stage_widget.lbl_y.setText(f"Y: {hw_y:.3f} mm")
                 self.log(f"已同步硬件位置: X={hw_x:.4f}, Y={hw_y:.4f}")
             else:
                 # 如果完全无法读取（比如 Nators 且未修复驱动），则不强制归零，

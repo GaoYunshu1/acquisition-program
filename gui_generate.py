@@ -265,7 +265,7 @@ class ModernUI(QMainWindow):
         
         # 保存路径
         h_path = QHBoxLayout()
-        self.save_dir_edit = QLineEdit("data")
+        self.save_dir_edit = QLineEdit("please change this to your own path")
         self.btn_browse = QPushButton("...")
         h_path.addWidget(self.save_dir_edit); h_path.addWidget(self.btn_browse)
         form.addRow("目录:", h_path)
