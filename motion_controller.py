@@ -72,12 +72,10 @@ class xps(MotionController):
             self.xps.kill_group(group)
     
     def get_position(self, axis):
-        # 根据 axis 索引找到对应的 Group 名称 (如 Group3)
         if axis < len(self.groups):
             group_name = self.groups[axis]
             # 查询 .Pos 属性
-            return self.xps.get_stage_position(f'{group_name}.Pos')
-        return 0.0
+            return  GroupPositionCurrentGet(group_name, f'{group_name}.Pos')
 
     def move_by(self, distance: int, axis: int, relative: bool = True):
         try:

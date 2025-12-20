@@ -5,7 +5,6 @@ import io
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 import traceback
 
 # PyQt6 导入
@@ -195,7 +194,7 @@ class LogicWindow(ModernUI):
         
         self.btn_live.clicked.connect(self.toggle_live)
         self.btn_cap.clicked.connect(self.start_scan)
-        self.btn_save.clicked.connect(self.save_current_frame)
+        self.btn_save.clicked.connect(self.on_manual_save)
         self.btn_browse.clicked.connect(self.select_folder)
         self.btn_show_path.clicked.connect(self.preview_scan_path)
 
@@ -298,26 +297,9 @@ class LogicWindow(ModernUI):
         if success:
             self.camera = result
             self.btn_open_cam.setText("已就绪")
-            
-            # 0. 先设置默认值 (防止后续逻辑因找不到变量而崩溃)
-            # 科学相机默认 16-bit 比较安全，如果是 8-bit 相机这里没获取到，
-            # 后果只是图像显示比较暗，但不会崩
-            bit_depth = 16 
-            
-            # 1. 策略 A: 尝试调用标准接口 (适用于你修改过的 uc480.py)
-            if hasattr(self.camera, "get_bit_depth"):
-                try:
-                    bit_depth = self.camera.get_bit_depth()
-                except Exception as e: # 修正：必须加上 Exception as e
-                    self.log(f"获取位深失败，使用默认值 16: {e}")
+            self.btn_open_cam.setStyleSheet("background-color: #4CAF50; color: white;")
 
-            # 2. 策略 B: 尝试读取属性 (适用于某些简单的 SDK 封装)
-            elif hasattr(self.camera, "BitDepth"):
-                try:
-                    bit_depth = int(self.camera.BitDepth)
-                except:
-                    pass
-            
+            bit_depth = self.get_current_bit_depth()
             # 3. 计算饱和值 (2^n - 1)
             # 此时 bit_depth 一定有值 (要么是读取到的，要么是默认的16)
             self.saturation_value = (1 << bit_depth) - 1
@@ -328,6 +310,35 @@ class LogicWindow(ModernUI):
             
         else:
             self.log(f"相机错误: {result}")
+
+    import re
+
+    def get_current_bit_depth(self):
+        """
+        获取当前相机的位深（通过解析 color_mode 字符串）
+        返回: int (例如 8, 10, 12, 16)
+        """
+        # 1. 获取模式 (例如 'mono12', 'raw8', 'rgb8p')
+        mode = self.get_color_mode() 
+
+        # 2. 如果返回的是字符串，直接正则提取数字
+        if isinstance(mode, str):
+            match = re.search(r'(\d+)', mode)
+            if match:
+                return int(match.group(1))
+        
+        # 3. (备用逻辑) 如果返回的是 int 枚举值，尝试反查你的字典
+        elif isinstance(mode, int):
+            # 假设 self._color_modes 是你之前定义的字典
+            for name, val in self._color_modes.items():
+                if val == mode:
+                    # 找到对应名字后，递归调用自己处理字符串
+                    match = re.search(r'(\d+)', name)
+                    if match:
+                        return int(match.group(1))
+        
+        # 4. 默认回退值 (如果解析失败)
+        return 16
 
     def start_init_motion(self):
         stage_name = self.combo_stage.currentText()
@@ -357,7 +368,6 @@ class LogicWindow(ModernUI):
 
         try:     
             if hasattr(self.motion, 'get_position'):
-                # 注意：nators 驱动原代码有 bug，如果没修好会报错，所以这里加 try
                 try:
                     hw_x = float(self.motion.get_position(0))
                     hw_y = float(self.motion.get_position(1))

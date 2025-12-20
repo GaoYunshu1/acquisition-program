@@ -1,13 +1,6 @@
-
-# from PIL import Image
-# from pyueye import ueye
-# # import cv2
-# from PyQt5 import QtGui
-# from PyQt5.QtGui import QImage, QImageReader
 import numpy as np
 from pylablib.devices import uc480, DCAM
 from abc import ABC, abstractmethod
-# import imagingcontrol4 as ic4
 import time
 
 class Camera(ABC):
@@ -51,11 +44,8 @@ class IDS(Camera):
         except Exception as e:
             print(f'设置pixel rate失败：{e}')
 
-    def get_bit_depth(self): 
-        return self.cam.get_bit_depth()
-        
     def get_color_mode(self):
-        return self.get_color_mode()
+        return self.cam.get_color_mode()
 
     def set_color_mode(self, color_mode):
         try:

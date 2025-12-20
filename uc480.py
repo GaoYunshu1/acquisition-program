@@ -355,56 +355,6 @@ class UC480Camera(camera.IBinROICamera, camera.IExposureCamera):
                     "jpeg": uc480_defs.COLORMODE.IS_CM_JPEG, "rgb8plan": uc480_defs.COLORMODE.IS_CM_RGB8_PLANAR}
     _p_color_mode = interface.EnumParameterClass("color_mode", _color_modes)
 
-    def set_bit_depth(self, bit_depth):
-        """
-        Set the sensor bit depth by changing the color mode.
-        Args:
-            bit_depth (int): Target bit depth (e.g., 8, 10, 12, 16)
-        """
-        # 1. 获取当前模式的前缀 (mono, raw, rgb 等)
-        # 以便在切换位深时保持是黑白还是彩色模式
-        current_mode = self.get_color_mode()
-        
-        prefix = "mono" # 默认为黑白
-        if "raw" in current_mode:
-            prefix = "raw"
-        elif "rgb" in current_mode or "bgr" in current_mode:
-            # RGB 模式比较复杂，通常科学相机主要用 mono/raw
-            # 这里简单处理，如果原先是彩色，尝试保持 rgb 前缀，但通常 RGB 只有 8位
-            prefix = "rgb" 
-
-        # 2. 构造目标模式字符串，例如 "mono12" 或 "raw8"
-        target_mode = f"{prefix}{bit_depth}"
-        
-        # 3. 检查该模式是否受支持
-        available_modes = self.get_all_color_modes()
-        
-        # 特殊处理：有些相机支持 mono16 来容纳 12位数据
-        if target_mode not in available_modes:
-            # 如果请求 12位但只有 16位模式（12位打包在16位中），尝试升级
-            if bit_depth == 12 and f"{prefix}16" in available_modes:
-                target_mode = f"{prefix}16"
-        
-        if target_mode in available_modes:
-            self.set_color_mode(target_mode)
-            return self.get_bit_depth()
-        else:
-            raise ValueError(f"Bit depth {bit_depth} (Target mode: {target_mode}) is not supported by this camera. Supported modes: {available_modes}")
-
-    def get_bit_depth(self):
-        """
-        Get the current bit depth based on the color mode.
-        Returns:
-            int: The number of bits (e.g., 8, 10, 12, 16)
-        """
-        mode = self.get_color_mode()
-        # 解析模式字符串中的数字
-        import re
-        match = re.search(r'\d+', mode)
-        if match:
-            return int(match.group())
-        return 0
-        
     def _check_all_color_modes(self):
         names = []
         m0 = self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
