@@ -65,7 +65,6 @@ class DeviceLoader(QThread):
                     from motion_controller import nators
                     device_instance = nators(ip_address="192.168.0.254")
                     device_instance.open_system()
-                # 兼容 gui_generate.py 中写的 "NewPort" 简写
                 elif self.device_name == "NewPort":
                     from motion_controller import xps
                     device_instance = xps(IP='192.168.0.254')
@@ -338,8 +337,6 @@ class LogicWindow(ModernUI):
             self.btn_connect_stage.setText("已连接")
             self.log("位移台连接成功")
             
-            # [修改点]：原本这里可能写的是 self.zero_stage()
-            # [标准逻辑]：连接后第一件事是“同步硬件状态”
             self.sync_hardware_position() 
         else:
             self.log(f"位移台错误: {result}")
@@ -347,25 +344,53 @@ class LogicWindow(ModernUI):
     def sync_hardware_position(self):
         """标准逻辑：读取硬件当前的绝对位置更新到软件"""
         if not self.motion: return
-        try:
-            # 假设 XPS 驱动有一个获取位置的方法，通常是 GroupPositionCurrentGet
-            # 或者是通用的 get_position(axis_index)
-            # 这里演示通用写法，具体取决于你的 xps.py 封装
+        # 默认回退值
+        hw_x, hw_y = 0.0, 0.0
+        success = False
+
+        try:     
+            if hasattr(self.motion, 'get_position'):
+                # 注意：nators 驱动原代码有 bug，如果没修好会报错，所以这里加 try
+                try:
+                    hw_x = float(self.motion.get_position(0))
+                    hw_y = float(self.motion.get_position(1))
+                    success = True
+                except Exception:
+                    pass
             
-            # 0 代表 X轴, 1 代表 Y轴
-            hw_x = self.motion.get_position(0) 
-            hw_y = self.motion.get_position(1)
-            
-            # 更新软件内的“绝对坐标缓存”
-            self.stage_pos['x'] = float(hw_x)
-            self.stage_pos['y'] = float(hw_y)
-            
-            # 刷新 UI 显示
-            self.update_stage_display()
-            self.log(f"已同步硬件位置: X={hw_x}, Y={hw_y}")
+            if not success:
+                # 1. 针对 XPS (Newport)
+                if hasattr(self.motion, 'xps') and hasattr(self.motion, 'groups'):
+                    # 确保 Group 已经初始化
+                    if len(self.motion.groups) >= 2:
+                        g0 = self.motion.groups[0] # 对应 Axis 0
+                        g1 = self.motion.groups[1] # 对应 Axis 1
+                        hw_x = self.motion.xps.get_stage_position(f'{g0}.Pos')
+                        hw_y = self.motion.xps.get_stage_position(f'{g1}.Pos')
+                        success = True
+                
+                # 2. 针对 SmartAct (pylablib)
+                elif hasattr(self.motion, 'motion') and hasattr(self.motion.motion, 'get_position'):
+                    # SmartAct MCS2 原生返回单位通常是 米(m)，需转为 mm
+                    hw_x = self.motion.motion.get_position(0) * 1000.0
+                    hw_y = self.motion.motion.get_position(1) * 1000.0
+                    success = True
+
+            if success:
+                self.stage_pos['x'] = hw_x
+                self.stage_pos['y'] = hw_y
+                self.update_stage_display()
+                self.log(f"已同步硬件位置: X={hw_x:.4f}, Y={hw_y:.4f}")
+            else:
+                # 如果完全无法读取（比如 Nators 且未修复驱动），则不强制归零，
+                # 而是保留当前软件坐标或提示警告
+                self.log("警告: 当前位移台驱动不支持读取绝对位置，保持软件坐标不变。")
+
         except Exception as e:
-            self.log(f"读取硬件位置失败，回退到软件零点: {e}")
-            self.zero_stage()
+            self.log(f"同步位置异常: {e}")
+            # 只有在真的出错时才建议重置
+            # self.zero_stage()
+
 
     # --- 图像处理核心逻辑 ---
     def crop_image(self, full_image):
@@ -695,7 +720,7 @@ class LogicWindow(ModernUI):
         else:
             self.log("操作已取消。")
             return False
-            
+
     def start_scan(self):
         # 扫描前强制重新生成一次，确保参数是最新的
         self.preview_scan_path()
