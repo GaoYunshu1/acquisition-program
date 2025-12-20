@@ -190,7 +190,7 @@ class ModernUI(QMainWindow):
         
         device_layout.addWidget(QLabel("位移台:"), 1, 0)
         self.combo_stage = QComboBox()
-        self.combo_stage.addItems(["NewPort", "SmartAct", "Nators", "Simulated"])
+        self.combo_stage.addItems(["NewPort", "SmartAct", "Nators"])
         self.setup_combo_centered(self.combo_stage)
         device_layout.addWidget(self.combo_stage, 1, 1)
         
@@ -203,7 +203,7 @@ class ModernUI(QMainWindow):
         # --- B. 位移台控制 ---
         stage_group = QGroupBox("2. 位移台控制")
         stage_layout = QVBoxLayout()
-        self.stage_widget = StageControlWidget() # 实例化
+        self.stage_widget = StageControlWidget()
         stage_layout.addWidget(self.stage_widget)
         stage_group.setLayout(stage_layout)
         layout.addWidget(stage_group)
@@ -369,7 +369,9 @@ class ModernUI(QMainWindow):
         return w
 
     def log(self, msg):
-        self.txt_log.append(f">> {msg}")
+        # 可以在普通日志前加个时间戳或者颜色
+        current_time = time.strftime("%H:%M:%S")
+        self.txt_log.append(f"[{current_time}] {msg}")
         self.txt_log.verticalScrollBar().setValue(self.txt_log.verticalScrollBar().maximum())
 
 if __name__ == "__main__":

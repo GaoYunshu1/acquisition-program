@@ -51,6 +51,9 @@ class IDS(Camera):
         except Exception as e:
             print(f'设置pixel rate失败：{e}')
 
+    def get_bit_depth(self): 
+        return self.cam.get_bit_depth()
+        
     def get_color_mode(self):
         return self.get_color_mode()
 
