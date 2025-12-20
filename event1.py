@@ -35,6 +35,7 @@ class DeviceLoader(QThread):
                     from camera import IDS
                     device_instance = IDS()
                     device_instance.start_acquisition()
+                    device_instance.set_pixel_rate(7e7)
                 elif self.device_name == "Ham":
                     from camera import Ham
                     device_instance = Ham()
@@ -60,14 +61,15 @@ class DeviceLoader(QThread):
                 if self.device_name == "SmartAct":
                     from motion_controller import smartact
                     device_instance = smartact()
-                elif self.device_name == "NewPort":
-                    from motion_controller import xps
-                    device_instance = xps(ip_address="192.168.0.254")
-                    device_instance.init_groups(['Group3', 'Group4'])
                 elif self.device_name == "Nators":
                     from motion_controller import nators
                     device_instance = nators(ip_address="192.168.0.254")
                     device_instance.open_system()
+                # 兼容 gui_generate.py 中写的 "NewPort" 简写
+                elif self.device_name == "NewPort":
+                    from motion_controller import xps
+                    device_instance = xps(IP='192.168.0.254')
+                    device_instance.init_groups(['Group3', 'Group4'])
 
             if device_instance:
                 self.finished_signal.emit(True, device_instance)
