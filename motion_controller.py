@@ -34,6 +34,9 @@ class smartact(MotionController):
         if self.motion.is_moving(axis=1):
             self.motion.stop(axis=1)
 
+    def get_position(self, axis=0):
+        # pylablib 返回的是米，转换为毫米
+        return self.motion.get_position(axis) * 1000.0
 
 class xps(MotionController):
     def __init__(self, IP='192.168.254.254', username: str = 'Administrator', password: str = 'Administrator',
@@ -67,6 +70,14 @@ class xps(MotionController):
     def stop_all(self):
         for group in self.groups:
             self.xps.kill_group(group)
+    
+    def get_position(self, axis):
+        # 根据 axis 索引找到对应的 Group 名称 (如 Group3)
+        if axis < len(self.groups):
+            group_name = self.groups[axis]
+            # 查询 .Pos 属性
+            return self.xps.get_stage_position(f'{group_name}.Pos')
+        return 0.0
 
     def move_by(self, distance: int, axis: int, relative: bool = True):
         try:
@@ -90,6 +101,8 @@ class nators(MotionController):
     def __init__(self):
         super().__init__()
         dll_path = 'C:/Windows/System32/NTControl.dll'
+        self._x = 0.0  # 【新增】防止报错
+        self._y = 0.0  # 【新增】防止报错
         # 加载 DLL
         try:
             self.stage_dll = ctypes.CDLL(dll_path)
@@ -113,6 +126,9 @@ class nators(MotionController):
             self.stage_dll.NT_GotoPositionRelative_S.restype = self.NT_STATUS
 
         self.system_index = None
+
+    def get_position(self, axis):
+        return self._x if axis == 0 else self._y
 
     def open_system(self, system_locator='usb:id:0685782677', options="sync"):
         """打开系统并返回系统索引"""
@@ -148,7 +164,7 @@ class nators(MotionController):
             return None
 
     def get_position(self, axis):
-           
+
         return self._x if axis == 0 else self._y
     def call_nt_find_systems(self, options=""):
         """查找可用系统并返回系统定位符列表"""
