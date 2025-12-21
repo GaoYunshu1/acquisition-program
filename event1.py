@@ -530,8 +530,8 @@ class LogicWindow(ModernUI):
 
     # --- 位移台逻辑 ---
     def update_stage_display(self):
-        self.stage_widget.lbl_x.setText(f"X: {self.stage_pos['x']:.3f} mm")
-        self.stage_widget.lbl_y.setText(f"Y: {self.stage_pos['y']:.3f} mm")
+        self.stage_widget.lbl_x.setText(f"X: {self.stage_widget.target_x.text()} mm")
+        self.stage_widget.lbl_y.setText(f"Y: {self.stage_widget.target_y.text()} mm")
 
     def move_stage_manual(self, axis_name, direction):
         if not self.motion:
@@ -554,9 +554,9 @@ class LogicWindow(ModernUI):
         try:
             self.motion.move_by(dist, axis=target_axis)
             if axis_name == 'X':
-                self.stage_pos['x'] += step * direction 
+                self.stage_widget.target_x.setText(f"{self.stage_widget.target_x.text()}{step * direction:.3f}")
             else:
-                self.stage_pos['y'] += step * direction
+                self.stage_widget.target_y.setText(f"{self.stage_widget.target_y.text()}{step * direction:.3f}")
             self.update_stage_display()
         except Exception as e:
             self.log(f"移动失败: {e}")
@@ -570,8 +570,8 @@ class LogicWindow(ModernUI):
             self.log("坐标输入格式错误")
             return
         
-        dx = target_x - self.stage_pos['x']
-        dy = target_y - self.stage_pos['y']
+        dx = target_x - float(self.stage_widget.target_x.text())
+        dy = target_y - float(self.stage_widget.target_y.text())
         
         if abs(dx) > 1e-6: self._move_logical_delta(dx, 0)
         if abs(dy) > 1e-6: self._move_logical_delta(dy, 1)
@@ -588,18 +588,18 @@ class LogicWindow(ModernUI):
         if logical_axis_idx == 0: # X
             phys_axis = 1 if is_swap else 0
             if inv_x: phys_dist *= -1
-            self.stage_pos['x'] += delta
+            self.stage_widget.target_x.setText(f"{self.stage_widget.target_x.text()}{delta:.3f}")
         else: # Y
             phys_axis = 0 if is_swap else 1
             if inv_y: phys_dist *= -1
-            self.stage_pos['y'] += delta
+            self.stage_widget.target_y.setText(f"{self.stage_widget.target_y.text()}{delta:.3f}")
             
         self.motion.move_by(phys_dist, axis=phys_axis)
         self.update_stage_display()
 
     def zero_stage(self):
-        self.stage_pos['x'] = 0.0
-        self.stage_pos['y'] = 0.0
+        self.stage_widget.target_x.setText("0.000")
+        self.stage_widget.target_y.setText("0.000")
         self.update_stage_display()
         self.log("坐标已归零")
 
