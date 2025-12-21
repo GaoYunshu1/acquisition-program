@@ -313,11 +313,6 @@ class LogicWindow(ModernUI):
     import re
 
     def get_current_bit_depth(self):
-        """
-        获取当前相机的位深（通过解析 color_mode 字符串）
-        返回: int (例如 8, 10, 12, 16)
-        """
-        # 1. 获取模式 (例如 'mono12', 'raw8', 'rgb8p')
         mode = self.get_color_mode() 
 
         # 2. 如果返回的是字符串，直接正则提取数字
@@ -326,18 +321,39 @@ class LogicWindow(ModernUI):
             if match:
                 return int(match.group(1))
         
-        # 3. (备用逻辑) 如果返回的是 int 枚举值，尝试反查你的字典
         elif isinstance(mode, int):
-            # 假设 self._color_modes 是你之前定义的字典
             for name, val in self._color_modes.items():
                 if val == mode:
-                    # 找到对应名字后，递归调用自己处理字符串
                     match = re.search(r'(\d+)', name)
                     if match:
                         return int(match.group(1))
         
         # 4. 默认回退值 (如果解析失败)
         return 16
+
+    
+    def _check_all_color_modes(self):
+        names = []
+        m0 = self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
+        for n, m in self._color_modes.items():
+            try:
+                self.lib.is_SetColorMode(self.hcam, m, check=True)
+                nm = self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
+                if m == nm:
+                    names.append(n)
+            except uc480LibError as err:
+                if err.code != uc480_defs.ERROR.IS_INVALID_COLOR_FORMAT and err.code != uc480_defs.ERROR.IS_NO_SUCCESS:
+                    raise
+        self.lib.is_SetColorMode(self.hcam, m0)
+        return names
+
+    def get_all_color_modes(self):
+        """Get a list of all available color modes"""
+        return self._all_color_modes
+
+    @interface.use_parameters(_returns="color_mode")
+    def get_color_mode(self):
+        return self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
 
     def start_init_motion(self):
         stage_name = self.combo_stage.currentText()
@@ -375,7 +391,6 @@ class LogicWindow(ModernUI):
                     pass
             
             if not success:
-                # 1. 针对 XPS (Newport)
                 if hasattr(self.motion, 'xps') and hasattr(self.motion, 'groups'):
                     # 确保 Group 已经初始化
                     if len(self.motion.groups) >= 2:
@@ -555,9 +570,9 @@ class LogicWindow(ModernUI):
         try:
             self.motion.move_by(dist, axis=target_axis)
             if axis_name == 'X':
-                self.stage_widget.target_x.setText(f"{self.stage_widget.target_x.text()}{step * direction:.3f}")
+                self.stage_widget.target_x.setText(f"{float(self.stage_widget.target_x.text()) + step * direction:.3f}")
             else:
-                self.stage_widget.target_y.setText(f"{self.stage_widget.target_y.text()}{step * direction:.3f}")
+                self.stage_widget.target_y.setText(f"{float(self.stage_widget.target_y.text()) + step * direction:.3f}")
             self.update_stage_display()
         except Exception as e:
             self.log(f"移动失败: {e}")
@@ -608,8 +623,6 @@ class LogicWindow(ModernUI):
         try:
             from Scanner import Scanner
             import math # 需要引入math库进行向上取整
-
-            # 1. 修正映射字典 (原代码是集合{}，无法使用.get，必须改为字典映射)
             mode_map = {
                 "矩形": "rectangle", 
                 "圆形": "round", 

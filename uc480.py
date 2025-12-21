@@ -355,34 +355,6 @@ class UC480Camera(camera.IBinROICamera, camera.IExposureCamera):
                     "jpeg": uc480_defs.COLORMODE.IS_CM_JPEG, "rgb8plan": uc480_defs.COLORMODE.IS_CM_RGB8_PLANAR}
     _p_color_mode = interface.EnumParameterClass("color_mode", _color_modes)
 
-    def _check_all_color_modes(self):
-        names = []
-        m0 = self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
-        for n, m in self._color_modes.items():
-            try:
-                self.lib.is_SetColorMode(self.hcam, m, check=True)
-                nm = self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
-                if m == nm:
-                    names.append(n)
-            except uc480LibError as err:
-                if err.code != uc480_defs.ERROR.IS_INVALID_COLOR_FORMAT and err.code != uc480_defs.ERROR.IS_NO_SUCCESS:
-                    raise
-        self.lib.is_SetColorMode(self.hcam, m0)
-        return names
-
-    def get_all_color_modes(self):
-        """Get a list of all available color modes"""
-        return self._all_color_modes
-
-    @interface.use_parameters(_returns="color_mode")
-    def get_color_mode(self):
-        """
-        Get current color mode.
-
-        For possible modes, see :meth:`get_all_color_modes`.
-        """
-        return self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
-
     @camera.acqcleared
     @interface.use_parameters(mode="color_mode")
     def set_color_mode(self, mode):
