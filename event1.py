@@ -162,6 +162,8 @@ class LogicWindow(ModernUI):
     def __init__(self):
         super().__init__()
         sys.excepthook = self.handle_exception
+        self.timer = QTimer()
+        self.is_live = False
         
         # --- 1. 替换图像控件 ---
         old_layout = self.image_area.layout()
@@ -261,10 +263,6 @@ class LogicWindow(ModernUI):
                 
                 # 2. 更新 View 显示
                 self.image_view.update_image(cropped_img, show_mask)
-
-                # ==========================================
-                # 【新增逻辑】: 图像更新时，刷新鼠标位置的数值
-                # ==========================================
                 h, w = cropped_img.shape
                 
                 # 检查缓存坐标是否还在当前图像范围内 (防止ROI改变导致越界)
@@ -296,10 +294,18 @@ class LogicWindow(ModernUI):
             self.camera = result
             self.btn_open_cam.setText("已就绪")
             self.btn_open_cam.setStyleSheet("background-color: #4CAF50; color: white;")
+            self.set_exposure_time(self.exposure_spin.value())
 
-            bit_depth = self.get_current_bit_depth()
-            # 3. 计算饱和值 (2^n - 1)
-            # 此时 bit_depth 一定有值 (要么是读取到的，要么是默认的16)
+            try:
+                if hasattr(self.camera, 'bit_depth'):
+                    bit_depth = int(self.camera.bit_depth)
+                elif hasattr(self.camera, 'get_bit_depth'):
+                    bit_depth = int(self.camera.get_bit_depth())
+                elif hasattr(self.camera, 'BitDepth'): # 兼容某些SDK命名
+                    bit_depth = int(self.camera.BitDepth)
+            except Exception as e:
+                self.log(f"获取位深失败，使用默认值 16: {e}")
+
             self.saturation_value = (1 << bit_depth) - 1
             
             # 4. 更新界面
@@ -309,48 +315,6 @@ class LogicWindow(ModernUI):
         else:
             self.log(f"相机错误: {result}")
 
-    import re
-
-    def get_current_bit_depth(self):
-        mode = self.get_color_mode() 
-
-        # 2. 如果返回的是字符串，直接正则提取数字
-        if isinstance(mode, str):
-            match = re.search(r'(\d+)', mode)
-            if match:
-                return int(match.group(1))
-        
-        elif isinstance(mode, int):
-            for name, val in self._color_modes.items():
-                if val == mode:
-                    match = re.search(r'(\d+)', name)
-                    if match:
-                        return int(match.group(1))
-        
-        # 4. 默认回退值 (如果解析失败)
-        return 16
-
-    
-    def _check_all_color_modes(self):
-        names = []
-        m0 = self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
-        for n, m in self._color_modes.items():
-            try:
-                self.lib.is_SetColorMode(self.hcam, m, check=True)
-                nm = self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
-                if m == nm:
-                    names.append(n)
-            except uc480LibError as err:
-                if err.code != uc480_defs.ERROR.IS_INVALID_COLOR_FORMAT and err.code != uc480_defs.ERROR.IS_NO_SUCCESS:
-                    raise
-        self.lib.is_SetColorMode(self.hcam, m0)
-        return names
-
-    def get_all_color_modes(self):
-        """Get a list of all available color modes"""
-        return self._all_color_modes
-
-    @interface.use_parameters(_returns="color_mode")
     def get_color_mode(self):
         return self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
 
@@ -376,49 +340,51 @@ class LogicWindow(ModernUI):
     def sync_hardware_position(self):
         """标准逻辑：读取硬件当前的绝对位置更新到软件"""
         if not self.motion: return
-        # 默认回退值
+        
         hw_x, hw_y = 0.0, 0.0
         success = False
 
         try:     
+            # 1. 尝试通用接口 get_position(axis)
             if hasattr(self.motion, 'get_position'):
-                try:
-                    hw_x = float(self.motion.get_position(0))
-                    hw_y = float(self.motion.get_position(1))
-                    success = True
-                except Exception:
-                    pass
+                hw_x = float(self.motion.get_position(0))
+                hw_y = float(self.motion.get_position(1))
+                success = True
             
+            # 2. 针对特定控制器的特殊处理 (XPS, SmartAct)
             if not success:
+                # XPS 处理逻辑 (保持你原有的)
                 if hasattr(self.motion, 'xps') and hasattr(self.motion, 'groups'):
-                    # 确保 Group 已经初始化
                     if len(self.motion.groups) >= 2:
-                        g0 = self.motion.groups[0] # 对应 Axis 0
-                        g1 = self.motion.groups[1] # 对应 Axis 1
+                        g0 = self.motion.groups[0]
+                        g1 = self.motion.groups[1]
                         hw_x = self.motion.xps.get_stage_position(f'{g0}.Pos')
                         hw_y = self.motion.xps.get_stage_position(f'{g1}.Pos')
                         success = True
                 
-                # 2. 针对 SmartAct (pylablib)
-                elif hasattr(self.motion, 'motion') and hasattr(self.motion.motion, 'get_position'):
-                    # SmartAct MCS2 原生返回单位通常是 米(m)，需转为 mm
-                    hw_x = self.motion.motion.get_position(0) * 1000.0
-                    hw_y = self.motion.motion.get_position(1) * 1000.0
-                    success = True
-
             if success:
+                # [关键] 这里更新显示的 Label，而不是 Target 输入框
+                # 显示给用户看的是 lbl_x / lbl_y
                 self.stage_widget.lbl_x.setText(f"X: {hw_x:.3f} mm")
                 self.stage_widget.lbl_y.setText(f"Y: {hw_y:.3f} mm")
-                self.log(f"已同步硬件位置: X={hw_x:.4f}, Y={hw_y:.4f}")
+                
+                self.stage_widget.target_x.blockSignals(True)
+                self.stage_widget.target_y.blockSignals(True)
+                
+                # 安全地修改文本，此时绝对不会触发 move_stage_absolute
+                self.stage_widget.target_x.setText(f"{hw_x:.3f}")
+                self.stage_widget.target_y.setText(f"{hw_y:.3f}")
+                
+                # 修改完后，必须恢复信号，否则用户手动输入回车也没反应了
+                self.stage_widget.target_x.blockSignals(False)
+                self.stage_widget.target_y.blockSignals(False)
             else:
-                # 如果完全无法读取（比如 Nators 且未修复驱动），则不强制归零，
-                # 而是保留当前软件坐标或提示警告
-                self.log("警告: 当前位移台驱动不支持读取绝对位置，保持软件坐标不变。")
+                pass
 
         except Exception as e:
+            self.stage_widget.target_x.blockSignals(False)
+            self.stage_widget.target_y.blockSignals(False)
             self.log(f"同步位置异常: {e}")
-            # 只有在真的出错时才建议重置
-            # self.zero_stage()
 
 
     # --- 图像处理核心逻辑 ---
@@ -492,7 +458,7 @@ class LogicWindow(ModernUI):
                 
                 if self.chk_log.isChecked():
                     img_disp = np.log1p(cropped_img.astype(np.float32))
-                    img_disp = (img_disp / img_disp.max() * 65535).astype(np.uint16)
+                    img_disp = (img_disp / img_disp.max() * self.saturation_value).astype(np.uint16)
                     self.image_view.update_image(img_disp, show_mask)
                 else:
                     self.image_view.update_image(cropped_img, show_mask)
@@ -501,18 +467,28 @@ class LogicWindow(ModernUI):
 
     def toggle_live(self):
         if not self.camera:
-            self.log("请先打开相机！")
+            self.log("请先连接并初始化相机！")
             return
+
         if self.is_live:
-            self.timer.stop()
+            # === 如果当前是启动状态，则停止 ===
+            self.timer.stop()  # 停止定时器
+            self.is_live = False
+            
+            # 更新按钮样式
             self.btn_live.setText("👁 启动")
             self.btn_live.setStyleSheet("background:#27ae60;color:white;font-weight:bold;")
-            self.is_live = False
+            self.log("实时显示已停止")
+            
         else:
+            # 根据您相机的曝光时间，这个值可以调整，比如 30 或 100
             self.timer.start(50) 
+            self.is_live = True
+            
+            # 更新按钮样式
             self.btn_live.setText("⬛ 停止")
             self.btn_live.setStyleSheet("background:#7f8c8d;color:white;font-weight:bold;")
-            self.is_live = True
+            self.log("实时显示已启动")
 
     def calculate_center(self):
         if not self.camera:
@@ -567,12 +543,10 @@ class LogicWindow(ModernUI):
             
         dist = step * direction
         try:
+            # 1. 执行相对移动
             self.motion.move_by(dist, axis=target_axis)
-            if axis_name == 'X':
-                self.stage_widget.target_x.setText(f"{float(self.stage_widget.target_x.text()) + step * direction:.3f}")
-            else:
-                self.stage_widget.target_y.setText(f"{float(self.stage_widget.target_y.text()) + step * direction:.3f}")
-            self.update_stage_display()
+            self.sync_hardware_position()
+            
         except Exception as e:
             self.log(f"移动失败: {e}")
 
@@ -585,12 +559,41 @@ class LogicWindow(ModernUI):
             self.log("坐标输入格式错误")
             return
         
-        dx = target_x - float(self.stage_widget.target_x.text())
-        dy = target_y - float(self.stage_widget.target_y.text())
+        self.log(f"移动至绝对位置: ({target_x}, {target_y})...")
         
-        if abs(dx) > 1e-6: self._move_logical_delta(dx, 0)
-        if abs(dy) > 1e-6: self._move_logical_delta(dy, 1)
-        self.log(f"移动至: ({target_x}, {target_y})")
+        try:
+            # 方案 A: 优先使用绝对移动接口 (更准)
+            if hasattr(self.motion, 'move_to'):
+                # 处理轴交换
+                is_swap = self.stage_widget.check_swap.isChecked()
+                
+                # 简单逻辑：如果不交换，0是X；如果交换，1是X
+                ax_x = 1 if is_swap else 0
+                ax_y = 0 if is_swap else 1
+                
+                self.motion.move_to(target_x, axis=ax_x)
+                self.motion.move_to(target_y, axis=ax_y)
+            
+            else:
+                # 方案 B: 如果只有 move_by，则需要先读取当前位置算差值
+                # (这里保持你原来的逻辑，但加上硬件同步)
+                current_x_str = self.stage_widget.lbl_x.text().split(':')[-1].replace('mm','').strip()
+                current_y_str = self.stage_widget.lbl_y.text().split(':')[-1].replace('mm','').strip()
+                
+                cur_x = float(current_x_str) if current_x_str else 0.0
+                cur_y = float(current_y_str) if current_y_str else 0.0
+                
+                dx = target_x - cur_x
+                dy = target_y - cur_y
+                
+                if abs(dx) > 1e-6: self._move_logical_delta(dx, 0)
+                if abs(dy) > 1e-6: self._move_logical_delta(dy, 1)
+
+            # 无论哪种方式，移动完最后都要同步显示
+            self.sync_hardware_position()
+
+        except Exception as e:
+            self.log(f"绝对移动失败: {e}")
 
     def _move_logical_delta(self, delta, logical_axis_idx):
         is_swap = self.stage_widget.check_swap.isChecked()
@@ -613,10 +616,35 @@ class LogicWindow(ModernUI):
         self.update_stage_display()
 
     def zero_stage(self):
-        self.stage_widget.target_x.setText("0.000")
-        self.stage_widget.target_y.setText("0.000")
-        self.update_stage_display()
-        self.log("坐标已归零")
+        if not self.motion:
+            self.log("位移台未连接")
+            return
+
+        self.log("正在执行回零操作 (Move to Absolute 0)...")
+        try:
+            # 尝试调用硬件的绝对移动接口
+            # 假设驱动通过 move_to(position, axis) 实现
+            # Axis 0 = X, Axis 1 = Y
+            self.motion.move_to(0.0, axis=0)
+            self.motion.move_to(0.0, axis=1)
+            
+            # 移动完成后，同步硬件位置显示
+            self.sync_hardware_position()
+            self.log("回零完成")
+            
+        except AttributeError:
+            # 如果驱动没有 move_to，尝试其他常见命名
+            self.log("驱动未提供标准 move_to 接口，尝试 set_position 0...")
+            try:
+                # 某些驱动可能是 set_position
+                if hasattr(self.motion, 'move_absolute'):
+                    self.motion.move_absolute(0.0, axis=0)
+                    self.motion.move_absolute(0.0, axis=1)
+                    self.sync_hardware_position()
+            except Exception as e:
+                self.log(f"回零失败: {e}")
+        except Exception as e:
+            self.log(f"回零异常: {e}")
 
     def preview_scan_path(self):
         try:
@@ -631,39 +659,13 @@ class LogicWindow(ModernUI):
             ui_mode_text = self.combo_scan_mode.currentText()
             mode = mode_map.get(ui_mode_text, "round") # 默认 fallback 到 round
             
-            # 2. 获取范围 (同时获取 X 和 Y)
+            # 2. 获取圈数
             try:
-                rx = float(self.scan_range_x.text())
-            except ValueError: rx = 1.0
-            
-            try:
-                ry = float(self.scan_range_y.text())
-            except ValueError: ry = rx # 如果Y没填或格式错误，默认等于X，保持正方形/正圆
-                
-            try:
-                step = float(self.scan_step.text())
-                if step <= 1e-6: step = 0.1 # 防止步长为0导致除法报错
-            except ValueError:
-                step = 0.1
-
-            # 3. 计算 scan_num
-            calc_scan_num = 10 # 默认值
-            
-            if mode == 'rectangle':
-                # 矩形模式：Scanner 生成的是 scan_num * scan_num 的正方形网格
-                # 为了保证覆盖用户输入的范围，我们取 X 和 Y 中的最大值
-                max_side = max(rx, ry)
-                calc_scan_num = int(math.ceil(max_side / step))
-                self.log(f"参数计算(矩形): Max边长={max_side:.3f}, 步长={step} -> 级数={calc_scan_num}")
-                
-            else:
-                diameter = min(rx, ry) 
-                radius = diameter / 2.0
-                calc_scan_num = int(math.ceil(radius / step))
-                self.log(f"参数计算({ui_mode_text}): 直径={diameter:.3f}, 半径={radius:.3f} -> 级数={calc_scan_num}")
+                scan_num = float(self.scan_num.text())
+            except ValueError: scan_num = 1
 
             # 4. 生成 Scanner 对象
-            self.scanner = Scanner(step=step, scan_num=calc_scan_num, mode=mode)
+            self.scanner = Scanner(step=step, scan_num=scan_num, mode=mode)
             
             # 5. 更新 UI 上的采集点数显示
             total_points = len(self.scanner.x)
