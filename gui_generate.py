@@ -213,7 +213,7 @@ class ModernUI(QMainWindow):
         cam_layout = QGridLayout()
         
         cam_layout.addWidget(QLabel("曝光 (ms):"), 0, 0)
-        self.exposure_spin = QDoubleSpinBox()
+        self.exposure_spin = QDoubleSpinBox("10.0")
         self.exposure_spin.setRange(0.001, 10000);self.exposure_spin.setAlignment(Qt.AlignmentFlag.AlignRight)
         cam_layout.addWidget(self.exposure_spin, 0, 1)
         
@@ -277,18 +277,12 @@ class ModernUI(QMainWindow):
         form.addRow("模式:", self.combo_scan_mode)
 
         # 参数 (右对齐)
-        self.scan_range_x = QLineEdit("0.2")
-        self.scan_range_y = QLineEdit("0.2")
-        self.scan_range_x.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.scan_range_y.setAlignment(Qt.AlignmentFlag.AlignRight)
-        h_range = QHBoxLayout()
-        h_range.addWidget(self.scan_range_x)
-        h_range.addWidget(self.scan_range_y)    
-        form.addRow("范围(mm):", h_range)
-        
         self.scan_step = QLineEdit("0.1"); self.scan_step.setAlignment(Qt.AlignmentFlag.AlignRight  )
         form.addRow("步长(mm):", self.scan_step)
         
+        self.scan_num = QLineEdit("5"); self.scan_num.setAlignment(Qt.AlignmentFlag.AlignRight)
+        form.addRow("扫描圈数:", self.scan_num)
+
         self.scan_points = QLineEdit(); self.scan_points.setAlignment(Qt.AlignmentFlag.AlignRight)
         form.addRow("采集点数:", self.scan_points)
         

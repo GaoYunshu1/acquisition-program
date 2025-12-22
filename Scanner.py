@@ -289,26 +289,11 @@ def visualize_scan_path(scanner:Scanner, save_path=None, dpi=100):
     ax.scatter(x[-1], y[-1], s=200, marker='X',
                c='orangered', edgecolor='k', label='End')
 
-    # 绘制扫描区域边界
-    max_extent = scanner.step * scanner.scan_num
-    rect = plt.Rectangle((-max_extent, -max_extent),
-                         2 * max_extent, 2 * max_extent,
-                         linewidth=2, linestyle='--',
-                         edgecolor='gray', facecolor='none')
-    ax.add_patch(rect)
-
     # 设置坐标轴
-    buffer = scanner.step * 0.5
-    ax.set_xlim(-max_extent - buffer, max_extent + buffer)
-    ax.set_ylim(-max_extent - buffer, max_extent + buffer)
     ax.set_aspect('equal')
-    ax.grid(True, linestyle=':', alpha=0.7)
+    ax.grid(True, linestyle=':', alpha=0.5)
     ax.set_xlabel('X Position')
     ax.set_ylabel('Y Position')
-
-    # 添加颜色条
-    # cbar = plt.colorbar(scatter, ax=ax)
-    # cbar.set_label('Scan Order')
 
     # 添加图例
     ax.legend(loc='upper right')
@@ -332,7 +317,7 @@ def visualize_scan_path(scanner:Scanner, save_path=None, dpi=100):
 
 if __name__ == '__main__':
     # scanner = Scanner(0.3, 5, nth=6,mode='rectangle', random_offset=True, offset_ratio=0.1)
-    scanner = Scanner(0.3, 5, nth=6,mode='fermat')
+    scanner = Scanner(0.3, 5, nth=6,mode='rectangle')
     # mat_struct = {
     #     # 'sz_fft': np.int32(params.sz_fft),
     #     # 'wavelength': np.float64(params.wavelength),
