@@ -47,8 +47,6 @@ class PICamera(Camera):
         """
         if self.cam:
             try:
-                # 尝试直接读取 PICam 底层参数 "AdcBitDepth"
-                # 这比简单的 16-bit 默认值更准确，因为有些 PI 相机支持切换 ADC 模式 (12/16/18 bit)
                 bit_depth = self.cam.get_attribute_value("AdcBitDepth")
                 return int(bit_depth)
             except Exception as e:
@@ -56,7 +54,7 @@ class PICamera(Camera):
                 # PI-MTE3 通常是 16-bit 科学级相机，如果读取失败，默认 16 是最安全的
                 return 16
         return 16
-        
+
     def set_ex_time(self, ex_time):
         """
         设置曝光时间
@@ -64,7 +62,7 @@ class PICamera(Camera):
         """
         if self.cam:
             try:
-                # pylablib 的 set_exposure 通常接受秒
+                # pylablib 的 set_exposure 通常接受秒为单位
                 self.cam.set_exposure(ex_time)
                 print(f"PI 相机曝光设置为: {ex_time} s")
             except Exception as e:

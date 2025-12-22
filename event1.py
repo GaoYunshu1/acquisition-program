@@ -121,17 +121,32 @@ class InteractiveImageView(QGraphicsView):
         # 处理 Mask (十字线)
         if show_mask:
             cx, cy = w / 2, h / 2
-            pen = QPen(QColor("lime"), 1)
-            pen.setStyle(Qt.PenStyle.DashLine)
+            
+            # 1. 定义垂直线的笔 (红色，宽度2，虚线)
+            pen_v = QPen(QColor("red"), 2)
+            pen_v.setStyle(Qt.PenStyle.DashLine)
+
+            # 2. 定义水平线的笔 (蓝色，宽度2，虚线)
+            pen_h = QPen(QColor("blue"), 2)
+            pen_h.setStyle(Qt.PenStyle.DashLine)
             
             if self.v_line is None:
-                self.v_line = self.scene.addLine(cx, 0, cx, h, pen)
-                self.h_line = self.scene.addLine(0, cy, w, cy, pen)
+                # 创建线条时分别传入对应的笔
+                self.v_line = self.scene.addLine(cx, 0, cx, h, pen_v)
+                self.h_line = self.scene.addLine(0, cy, w, cy, pen_h)
+                
+                # 设置层级，确保显示在图片上方
                 self.v_line.setZValue(1)
                 self.h_line.setZValue(1)
             else:
+                # 更新线条位置
                 self.v_line.setLine(cx, 0, cx, h)
                 self.h_line.setLine(0, cy, w, cy)
+                
+                # 【关键】更新笔的样式 (确保颜色和粗细实时生效)
+                self.v_line.setPen(pen_v)
+                self.h_line.setPen(pen_h)
+                
                 self.v_line.setVisible(True)
                 self.h_line.setVisible(True)
         else:
@@ -482,7 +497,7 @@ class LogicWindow(ModernUI):
             
         else:
             # 根据您相机的曝光时间，这个值可以调整，比如 30 或 100
-            self.timer.start(50) 
+            self.timer.start(int(self.exposure_spin.value() * 1000)) 
             self.is_live = True
             
             # 更新按钮样式
@@ -649,7 +664,6 @@ class LogicWindow(ModernUI):
     def preview_scan_path(self):
         try:
             from Scanner import Scanner
-            import math # 需要引入math库进行向上取整
             mode_map = {
                 "矩形": "rectangle", 
                 "圆形": "round", 
