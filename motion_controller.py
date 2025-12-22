@@ -58,15 +58,15 @@ class smartact(MotionController):
             self.motion.home(axis=axis)
 
 class xps(MotionController):
-    def __init__(self, ip='192.168.254.254', port=5001):
+    def __init__(self, IP='192.168.254.254'):
         super().__init__()
         self.xps = None
         self.groups = []
         try:
             from newportxps import NewportXPS
             # 注意: 用户名密码通常是 Administrator
-            self.xps = NewportXPS(ip, username='Administrator', password='Administrator', port=port)
-            print(f"XPS: 已连接到 {ip}")
+            self.xps = NewportXPS(IP, username='Administrator', password='Administrator')
+            print(f"XPS: 已连接到 {IP}")
         except Exception as e:
             print(f'XPS 初始化失败: {e}')
 
