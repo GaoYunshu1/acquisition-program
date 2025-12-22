@@ -38,11 +38,11 @@ class IDS(Camera):
         self.cam = uc480.UC480Camera(cam_id, backend='ueye')
         try:
             # 尝试设置为 12-bit
-            self.cam.set_color_mode('MONO12') 
+            self.cam.set_color_mode('mono12') 
             self._current_bit_depth = 12
         except:
             # 如果不支持，回退到 8-bit
-            self.cam.set_color_mode('MONO8')
+            self.cam.set_color_mode('mono8')
             self._current_bit_depth = 8
 
     def set_pixel_rate(self, pixel_rate):
