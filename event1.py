@@ -196,6 +196,7 @@ class LogicWindow(ModernUI):
         
         # 实时流定时器
         self.timer = QTimer()
+        self.timer.timeout.connect(self.update_frame) 
         self.is_live = False
         self.last_mouse_x = 0
         self.last_mouse_y = 0
