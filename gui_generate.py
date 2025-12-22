@@ -259,16 +259,42 @@ class ModernUI(QMainWindow):
 
     def setup_scan_tab(self):
         self.tab_scan = QWidget()
+        # 使用垂直布局来容纳多个 GroupBox
         layout = QVBoxLayout(self.tab_scan)
-        group = QGroupBox("自动扫描设置")
-        form = QFormLayout()
-        
-        # 保存路径
+        layout.setSpacing(10) # 块与块之间的间距
+
+        # ==========================================
+        # 模块 1: 保存设置 (您要求的自成一块)
+        # ==========================================
+        group_save = QGroupBox("保存设置")
+        layout_save = QVBoxLayout()
+        layout_save.setContentsMargins(10, 10, 10, 10)
+
+        # --- 您的代码片段 ---
+        self.save_path_widget = QWidget()  # 建议重命名为 widget，避免与路径字符串变量混淆
         h_path = QHBoxLayout()
+        h_path.setContentsMargins(0, 0, 0, 0) # 去掉内部边距，让它贴合 GroupBox
+        self.save_path_widget.setLayout(h_path)
+        
         self.save_dir_edit = QLineEdit("please change this to your own path")
         self.btn_browse = QPushButton("...")
-        h_path.addWidget(self.save_dir_edit); h_path.addWidget(self.btn_browse)
-        form.addRow("目录:", h_path)
+        self.btn_browse.setFixedWidth(40) # 限制一下按钮宽度会更好看
+        
+        h_path.addWidget(self.save_dir_edit)
+        h_path.addWidget(self.btn_browse)
+        # --------------------
+
+        layout_save.addWidget(self.save_path_widget)
+        group_save.setLayout(layout_save)
+        
+        # 添加到主布局
+        layout.addWidget(group_save)
+
+        # ==========================================
+        # 模块 2: 扫描参数 (原有的逻辑)
+        # ==========================================
+        group_scan = QGroupBox("自动扫描参数")
+        form = QFormLayout()
         
         # 模式
         self.combo_scan_mode = QComboBox()
@@ -276,31 +302,49 @@ class ModernUI(QMainWindow):
         self.setup_combo_centered(self.combo_scan_mode)
         form.addRow("模式:", self.combo_scan_mode)
 
-        # 参数 (右对齐)
-        self.scan_step = QLineEdit("0.1"); self.scan_step.setAlignment(Qt.AlignmentFlag.AlignRight  )
+        # 范围 (右对齐)
+        self.scan_range_x = QLineEdit("0.2")
+        self.scan_range_y = QLineEdit("0.2")
+        self.scan_range_x.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.scan_range_y.setAlignment(Qt.AlignmentFlag.AlignRight)
+        h_range = QHBoxLayout()
+        h_range.addWidget(self.scan_range_x)
+        h_range.addWidget(self.scan_range_y)    
+        form.addRow("范围(mm):", h_range)
+        
+        # 步长
+        self.scan_step = QLineEdit("0.1")
+        self.scan_step.setAlignment(Qt.AlignmentFlag.AlignRight)
         form.addRow("步长(mm):", self.scan_step)
         
-        self.scan_num = QLineEdit("5"); self.scan_num.setAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("扫描圈数:", self.scan_num)
-
-        self.scan_points = QLineEdit(); self.scan_points.setAlignment(Qt.AlignmentFlag.AlignRight)
-        form.addRow("采集点数:", self.scan_points)
+        # 采集点数 (只读回显)
+        self.scan_points = QLineEdit()
+        self.scan_points.setReadOnly(True) # 设为只读，因为是自动计算的
+        self.scan_points.setPlaceholderText("自动计算")
+        self.scan_points.setAlignment(Qt.AlignmentFlag.AlignRight)
+        form.addRow("预计点数:", self.scan_points)
         
+        # 按钮行
         self.btn_show_path = QPushButton("显示/更新扫描路径")
-        form.addRow(self.btn_show_path)
+        h_btns = QHBoxLayout()
+        h_btns.addWidget(self.btn_show_path)
+        form.addRow(h_btns)
         
-        # 【新增】用于显示路径预览的标签，放在按钮下方
+        # 预览区域
         self.lbl_scan_preview = QLabel("路径预览区域")
         self.lbl_scan_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_scan_preview.setMinimumHeight(250) # 设置最小高度
+        self.lbl_scan_preview.setMinimumHeight(250)
         self.lbl_scan_preview.setStyleSheet("border: 1px dashed #aaa; background-color: #f9f9f9;")
         self.lbl_scan_preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
-        # 将预览图添加到布局中
         form.addRow(self.lbl_scan_preview)
         
-        group.setLayout(form)
-        layout.addWidget(group)
+        group_scan.setLayout(form)
+        
+        # 添加到主布局
+        layout.addWidget(group_scan)
+        
+        # 底部弹簧，把内容顶上去
         layout.addStretch()
 
     def create_photon_panel(self):
