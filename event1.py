@@ -268,32 +268,6 @@ class LogicWindow(ModernUI):
         else:
             self.line_mouse_val.setStyleSheet("color: blue; font-weight: bold; background: #f0f0f0;")
 
-    def update_frame(self):
-        if self.camera:
-            try:
-                # 1. 获取并裁剪图像
-                img = self.camera.read_newest_image()
-                if img is None: return
-                cropped_img = self.crop_image(img)
-                
-                # 2. 更新 View 显示
-                self.image_view.update_image(cropped_img, show_mask)
-                h, w = cropped_img.shape
-                
-                # 检查缓存坐标是否还在当前图像范围内 (防止ROI改变导致越界)
-                if 0 <= self.last_mouse_x < w and 0 <= self.last_mouse_y < h:
-                    # 从【新图像】中取出【旧位置】的值
-                    current_val = cropped_img[self.last_mouse_y, self.last_mouse_x]
-                    self.update_pixel_display(current_val)
-                else:
-                    # 如果ROI变小导致坐标失效，重置回中心或0
-                    self.last_mouse_x = w // 2
-                    self.last_mouse_y = h // 2
-            
-            except Exception as e:
-                # self.log(f"Frame Update Error: {e}")
-                pass
-
     # --- 异步加载设备 ---
     def start_init_camera(self):
         """步骤1: 仅仅负责启动线程"""
@@ -463,29 +437,59 @@ class LogicWindow(ModernUI):
     def update_frame(self):
         if self.camera:
             try:
+                # 1. 获取并裁剪图像
                 img = self.camera.read_newest_image()
                 if img is None: return
-                
                 cropped_img = self.crop_image(img)
                 
+                # ==========================================
+                # 【恢复】 2. 全局最大值监测与饱和报警
+                # ==========================================
                 max_val = np.max(cropped_img)
                 self.line_global_max.setText(f"{max_val}")
                 
-                # 饱和报警
-                if max_val >= self.saturation_value:
+                # 检查是否过曝 (self.saturation_value 是之前计算好的，如 255 或 4095)
+                # 可以在 __init__ 里给个默认值防止报错: self.saturation_value = getattr(self, 'saturation_value', 65535)
+                limit = getattr(self, 'saturation_value', 65535)
+                
+                if max_val >= limit:
                     self.line_global_max.setStyleSheet("color: red; font-weight: bold; background: #ffeeee;")
                 else:
                     self.line_global_max.setStyleSheet("color: green; font-weight: bold; background: #f0f0f0;")
-                
+
+                # ==========================================
+                # 【恢复】 3. 处理 Log 显示和 Mask
+                # ==========================================
+                # 获取 Mask 勾选状态
                 show_mask = self.chk_mask.isChecked()
                 
+                # 处理 Log 变换
                 if self.chk_log.isChecked():
+                    # log(1+x) 变换，拉伸暗部细节
                     img_disp = np.log1p(cropped_img.astype(np.float32))
-                    img_disp = (img_disp / img_disp.max() * self.saturation_value).astype(np.uint16)
+                    # 归一化回原来的位深范围，以便显示
+                    img_disp = (img_disp / img_disp.max() * limit).astype(np.uint16)
                     self.image_view.update_image(img_disp, show_mask)
                 else:
+                    # 正常线性显示
                     self.image_view.update_image(cropped_img, show_mask)
+
+                # ==========================================
+                # 【保留】 4. 鼠标悬停数值更新 (防止 ROI 变化导致越界)
+                # ==========================================
+                h, w = cropped_img.shape
+                if 0 <= self.last_mouse_x < w and 0 <= self.last_mouse_y < h:
+                    # 从【原始数据】中取出值 (即使在 Log 模式下，也显示原始光子数)
+                    current_val = cropped_img[self.last_mouse_y, self.last_mouse_x]
+                    self.update_pixel_display(current_val)
+                else:
+                    # 越界重置
+                    self.last_mouse_x = w // 2
+                    self.last_mouse_y = h // 2
+            
             except Exception as e:
+                # 调试时可以打印，稳定后注释掉
+                # print(f"Update Frame Error: {e}")
                 pass
 
     def toggle_live(self):
@@ -554,7 +558,7 @@ class LogicWindow(ModernUI):
         if not self.motion:
             self.log("位移台未连接")
             return
-        step = self.stage_widget.step_spin.value()
+        stage_step = self.stage_widget.step_spin.value()
         is_swap = self.stage_widget.check_swap.isChecked()
         inv_x = self.stage_widget.check_inv_x.isChecked()
         inv_y = self.stage_widget.check_inv_y.isChecked()
@@ -567,7 +571,7 @@ class LogicWindow(ModernUI):
             target_axis = 0 if is_swap else 1
             if inv_y: direction *= -1
             
-        dist = step * direction
+        dist = stage_step * direction
         try:
             # 1. 执行相对移动
             self.motion.move_by(dist, axis=target_axis)
@@ -691,11 +695,11 @@ class LogicWindow(ModernUI):
             except ValueError: scan_range_x = scan_range_y = 1
 
             try:
-                step = float(self.scan_step.text())
-            except ValueError: step = 0.1
+                scan_step = float(self.scan_step.text())
+            except ValueError: scan_step = 0.1
             
             # 4. 生成 Scanner 对象
-            self.scanner = Scanner(step=step, scan_range_x=scan_range_x, scan_range_y=scan_range_y, mode=mode)
+            self.scanner = Scanner(step=scan_step, scan_range_x=scan_range_x, scan_range_y=scan_range_y, mode=mode)
             
             # 5. 更新 UI 上的采集点数显示
             total_points = len(self.scanner.x)
