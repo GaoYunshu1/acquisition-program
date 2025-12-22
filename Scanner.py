@@ -110,19 +110,34 @@ class Scanner:
                         pos_absolute.append((x, y))
                     
         elif self.mode == 'rectangle':
-            # 矩形扫描（蛇形路径）
-            pos_absolute = [(0.0, 0.0)]
-            for i in range(int(self.scan_range_x/self.step)):
-                for j in range(int(self.scan_range_y/self.step)):
-                    if i == 0 and j == 0:
-                        continue  # 跳过原点，因为已经添加
+            # === 矩形模式 (蛇形扫描) ===
+            # 1. 计算 X/Y 方向需要的点数 (向上取整)
+            # 例如: range=0.5, step=0.1 -> 5点; range=0.55, step=0.1 -> 6点
+            # 修正：之前 x/y 对应的 range 可能反了，这里明确 nx 对应 range_x
+            nx = int(math.ceil(self.scan_range_x / self.step))
+            ny = int(math.ceil(self.scan_range_y / self.step))
+            
+            # 确保至少扫描 1 个点
+            nx = max(1, nx)
+            ny = max(1, ny)
+            
+            pos_absolute = []
+            
+            for i in range(ny):      # 外层循环：Y轴 (行)
+                for j in range(nx):  # 内层循环：X轴 (列)
                     
-                    if i % 2 == 0:  # 偶数行从左到右
-                        x = j * self.step
-                    else:  # 奇数行从右到左
-                        x = (j + self.scan_range_x + 1) * self.step
+                    # --- 蛇形逻辑 ---
+                    # 偶数行 (0, 2, ...): 从左到右 (X 从 0 增加到 nx-1)
+                    # 奇数行 (1, 3, ...): 从右到左 (X 从 nx-1 减小到 0)
+                    if i % 2 == 0:
+                        grid_x = j
+                    else:
+                        grid_x = (nx - 1) - j
                     
+                    # 计算物理坐标
+                    x = grid_x * self.step
                     y = i * self.step
+                    
                     pos_absolute.append((x, y))
                     
         elif self.mode == 'fermat':

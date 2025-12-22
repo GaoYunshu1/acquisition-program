@@ -504,7 +504,10 @@ class LogicWindow(ModernUI):
             
         else:
             # 根据您相机的曝光时间，这个值可以调整，比如 30 或 100
-            self.timer.start(int(self.exposure_spin.value() * 1000)) 
+            exposure_ms = self.exposure_spin.value()
+            refresh_interval = max(30, int(exposure_ms)) 
+            
+            self.timer.start(refresh_interval)
             self.is_live = True
             
             # 更新按钮样式

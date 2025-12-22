@@ -36,6 +36,14 @@ class IDS(Camera):
         # print(uc480.UC480Camera.get_all_color_modes())
         cam_id = uc480.list_cameras(backend='ueye')[0][0]
         self.cam = uc480.UC480Camera(cam_id, backend='ueye')
+        try:
+            # 尝试设置为 12-bit
+            self.cam.set_color_mode('MONO12') 
+            self._current_bit_depth = 12
+        except:
+            # 如果不支持，回退到 8-bit
+            self.cam.set_color_mode('MONO8')
+            self._current_bit_depth = 8
 
     def set_pixel_rate(self, pixel_rate):
         try:
@@ -83,30 +91,7 @@ class IDS(Camera):
         return self.cam.get_frame_period()
 
     def get_bit_depth(self):
-        try:
-            # 获取当前颜色模式 (IS_GET_COLOR_MODE = 0x8000)
-            mode = self.lib.is_SetColorMode(self.hcam, 0x8000)
-            # 根据 uc480/uEye 定义的常量映射位深
-            # 常用模式映射表:
-            # IS_CM_MONO8 (6), IS_CM_SENSOR_RAW8 (11) -> 8-bit
-            # IS_CM_MONO12 (26), IS_CM_SENSOR_RAW12 (27) -> 12-bit
-            # IS_CM_MONO16 (28), IS_CM_SENSOR_RAW16 (29) -> 16-bit
-            # IS_CM_MONO10 (34), IS_CM_SENSOR_RAW10 (33) -> 10-bit
-            
-            if mode in [6, 11, 1]:  # 8-bit
-                return 8
-            elif mode in [26, 27]:  # 12-bit
-                return 12
-            elif mode in [28, 29]:  # 16-bit
-                return 16
-            elif mode in [33, 34]:  # 10-bit
-                return 10
-            # 如果是其他模式 (如 RGB)，默认返回 8 (单通道) 或根据需要调整
-            return 8
-            
-        except Exception as e:
-            print(f"IDS get_bit_depth error: {e}")
-            return 16 # 默认防守值
+        return getattr(self, '_current_bit_depth', 8)
     
 
 class Ham(Camera):
