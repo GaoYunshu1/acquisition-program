@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 # 需要安装 pyvcam： pip install PyVCAM
 from pyvcam import pvc
 from pyvcam.camera import Camera as PyVcamCamera
-from camera import Camera
+# from camera import Camera
 
 class Camera(ABC):
     def __init__(self):
@@ -32,7 +32,7 @@ class Camera(ABC):
     def get_frame_period(self):
         """获取帧率，返回：S"""
         pass
-    
+
 class PyVCAM(Camera):
     def __init__(self, cam_name: str = None, default_ex_time_s: float = 0.02):
         """
