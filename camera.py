@@ -393,12 +393,6 @@ class Basler(Camera):
 
 #         return 0.0
 
-class piCamera(Camera):
-    def __init__(self):
-        super().__init__()
-        self.cam = PICamera()
-
-
 if __name__ == '__main__':
     # camera = Camera()
     # camera.set_paramerters()

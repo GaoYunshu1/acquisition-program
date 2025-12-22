@@ -294,50 +294,51 @@ class LogicWindow(ModernUI):
                 pass
 
     # --- 异步加载设备 ---
-    def start_init_camera(self,success,result):
-        self.btn_open_cam.setEnabled(True)
+    def start_init_camera(self):
+        """步骤1: 仅仅负责启动线程"""
+        cam_name = self.combo_camera.currentText()
+        self.log(f"正在初始化相机: {cam_name}...")
+        self.btn_open_cam.setEnabled(False) # 禁用按钮防止重复点击
+        
+        # 创建并启动线程
+        self.loader_thread_cam = DeviceLoader('camera', cam_name)
+        # 【关键】将线程结束的信号，连接到下面的回调函数
+        self.loader_thread_cam.finished_signal.connect(self.on_camera_loaded)
+        self.loader_thread_cam.start()
+
+    def on_camera_loaded(self, success, result):
+        """步骤2: 线程跑完后自动运行这里，处理结果"""
+        self.btn_open_cam.setEnabled(True) # 恢复按钮
+        
         if success:
             self.camera = result
             self.btn_open_cam.setText("已就绪")
             self.btn_open_cam.setStyleSheet("background-color: #4CAF50; color: white;")
             
-            # 应用界面上的曝光时间
+            # --- 相机参数初始化逻辑 ---
+            # 1. 应用曝光
             self.set_exposure_time()
 
-            # --- 获取位深逻辑 ---
-            bit_depth = 16  # 默认值
-            
+            # 2. 获取位深
+            bit_depth = 16 
             try:
-                # 1. 优先尝试标准的 get_bit_depth 方法 (IDS, Lucid等)
                 if hasattr(self.camera, 'get_bit_depth'):
                     bit_depth = int(self.camera.get_bit_depth())
-                
-                # 2. 尝试属性访问 (某些SDK直接暴露属性)
                 elif hasattr(self.camera, 'bit_depth'):
                     bit_depth = int(self.camera.bit_depth)
                 elif hasattr(self.camera, 'BitDepth'):
                     bit_depth = int(self.camera.BitDepth)
-                
-                # 3. 如果是 IDS 且没读取到，尝试暴力读取 (不推荐，作为最后的 fallback)
-                elif self.combo_camera.currentText() == "IDS" and hasattr(self.camera, 'lib'):
-                     # 这里假设 camera 对象里有 lib 和 hcam
-                     mode = self.camera.lib.is_SetColorMode(self.camera.hcam, 0x8000)
-                     if mode in [26, 27]: bit_depth = 12
-                     elif mode in [28, 29]: bit_depth = 16
-                     elif mode in [6, 11]: bit_depth = 8
-                     
             except Exception as e:
                 self.log(f"获取位深失败，使用默认值 16: {e}")
 
-            # 计算饱和值
+            # 3. 计算饱和值
             self.saturation_value = (1 << bit_depth) - 1
             
-            # 更新界面
             self.line_cam_max.setText(f"{self.saturation_value} ({bit_depth}-bit)")
-            self.log(f"相机就绪，位深: {bit_depth}, 饱和阈值: {self.saturation_value}")
+            self.log(f"相机就绪 | 位深: {bit_depth} | 饱和阈值: {self.saturation_value}")
             
         else:
-            self.log(f"相机错误: {result}")
+            self.log(f"相机初始化失败: {result}")
 
     def start_init_motion(self):
         stage_name = self.combo_stage.currentText()
@@ -681,11 +682,16 @@ class LogicWindow(ModernUI):
             
             # 2. 获取圈数
             try:
-                scan_num = float(self.scan_num.text())
-            except ValueError: scan_num = 1
+                scan_range_x = float(self.scan_range_x.text())
+                scan_range_y = float(self.scan_range_y.text())
+            except ValueError: scan_range_x = scan_range_y = 1
 
+            try:
+                step = float(self.scan_step.text())
+            except ValueError: step = 0.1
+            
             # 4. 生成 Scanner 对象
-            self.scanner = Scanner(step=step, scan_num=scan_num, mode=mode)
+            self.scanner = Scanner(step=step, scan_range_x=scan_range_x, scan_range_y=scan_range_y, mode=mode)
             
             # 5. 更新 UI 上的采集点数显示
             total_points = len(self.scanner.x)
@@ -701,17 +707,8 @@ class LogicWindow(ModernUI):
             # 绘制路径连线
             ax.plot(x_pts, y_pts, 'b.-', markersize=2, linewidth=0.5, alpha=0.6)
             
-            # 绘制用户期望的范围框 (红色虚线)，方便对比实际扫描覆盖情况
-            ax.add_patch(plt.Rectangle((-rx/2, -ry/2), rx, ry, 
-                                     fill=False, edgecolor='r', linestyle='--', label='Set Range'))
-            
             ax.set_aspect('equal')
             ax.grid(True, linestyle=':', alpha=0.5)
-            # 稍微扩大一点视野以便看清边界
-            max_limit = max(rx, ry) / 2.0 * 1.1
-            ax.set_xlim(-max_limit, max_limit)
-            ax.set_ylim(-max_limit, max_limit)
-            
             plt.tight_layout()
 
             buf = io.BytesIO()

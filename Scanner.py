@@ -14,20 +14,22 @@ class Scanner:
     可选添加随机偏移。
     支持将扫描点位置保存为npy格式。
     """
-    def __init__(self, step, scan_num, mode='round', nth=6, random_offset=False, offset_ratio=0.2):
+    def __init__(self, step, scan_range_x, scan_range_y, mode='round', nth=6, random_offset=False, offset_ratio=0.2):
         """
         初始化扫描器
         
         参数:
             step: 扫描步长
-            scan_num: 扫描数量/范围
+            scan_range_x: 扫描范围x轴
+            scan_range_y: 扫描范围y轴
             mode: 扫描模式，可选 'round', 'rectangle', 'fermat'
             nth: 圆形扫描模式下控制基础角度数目
             random_offset: 是否添加随机偏移
             offset_ratio: 随机偏移比例，相对于step的比例
         """
-        self.step = step
-        self.scan_num = scan_num
+        self.step = float(step)
+        self.scan_range_x = float(scan_range_x)
+        self.scan_range_y = float(scan_range_y)
         self.mode = mode
         self.nth = nth  # 控制基础角度数目
         self.random_offset = random_offset  # 是否添加随机偏移
@@ -71,68 +73,93 @@ class Scanner:
         pos_absolute = []
         
         if self.mode == 'round':
-            # 计算扫描区域的半长
-            scan_half_length = self.step * self.scan_num
-            # 生成绝对坐标列表，包含原点
+            # === 圆形/椭圆模式 ===
+            # 1. 计算半轴长 (a: X轴半径, b: Y轴半径)
+            # scan_range_x 是物理直径(mm)，所以除以2得到半径
+            a = self.scan_range_x / 2.0
+            b = self.scan_range_y / 2.0
+            
+            # 2. 确定最大扫描半径
+            # 必须覆盖到椭圆的最长边，否则长轴方向扫不全
+            max_r = max(a, b)
+            
+            # 3. 估算需要的层数
+            # 向上取整，确保能覆盖最边缘
+            max_layers = int(math.ceil(max_r / self.step)) + 1
+            
             pos_absolute = [(0.0, 0.0)]
-            for ir in range(1, self.scan_num + 1):
-                rr = ir * self.step
+            
+            for ir in range(1, max_layers):
+                rr = ir * self.step # 当前圆环的物理半径
+                
+                # 优化：如果当前半径已经超过了长轴，不仅这一层没点，后面层也没点，直接退出
+                if rr > max_r: 
+                    break
+                
+                # 计算当前层的点数（保持原有逻辑）
                 nth_angles = self.nth * ir
                 dth = 2 * math.pi / nth_angles
+                
                 for ith in range(nth_angles):
                     theta = ith * dth
                     x = rr * math.sin(theta)
                     y = rr * math.cos(theta)
-                    # 检查是否超出扫描区域
-                    if abs(x) > scan_half_length or abs(y) > scan_half_length:
-                        break
-                    pos_absolute.append((x, y))
+                    
+                    # 使用 <= 1.0000001 防止浮点数误差漏掉边缘点
+                    if (x / a)**2 + (y / b)**2 <= 1.0000001:
+                        pos_absolute.append((x, y))
                     
         elif self.mode == 'rectangle':
             # 矩形扫描（蛇形路径）
             pos_absolute = [(0.0, 0.0)]
-            for i in range(self.scan_num):
-                for j in range(self.scan_num):
+            for i in range(int(self.scan_range_x/self.step)):
+                for j in range(int(self.scan_range_y/self.step)):
                     if i == 0 and j == 0:
                         continue  # 跳过原点，因为已经添加
                     
                     if i % 2 == 0:  # 偶数行从左到右
                         x = j * self.step
                     else:  # 奇数行从右到左
-                        x = (self.scan_num - 1 - j) * self.step
+                        x = (j + self.scan_range_x + 1) * self.step
                     
                     y = i * self.step
                     pos_absolute.append((x, y))
                     
         elif self.mode == 'fermat':
-            # 费马螺旋线扫描
-            # 黄金角，约137.5度
+            # === 费马螺旋模式 (支持椭圆) ===
+            
+            # 1. 计算半轴长 (a: X轴半径, b: Y轴半径)
+            a = self.scan_range_x / 2.0
+            b = self.scan_range_y / 2.0
+            
+            # 2. 确定最大生成半径
+            # 为了覆盖整个椭圆，必须生成到长轴的长度，然后再裁剪
+            max_r = max(a, b)
+            
+            # 3. 黄金角 (保持您原有的参数逻辑)
             golden_angle = math.pi / self.nth
             
-            # 计算需要的点数，确保覆盖扫描区域
-            scan_radius = self.step * self.scan_num
-            # area = math.pi * scan_radius**2
-            # points_count = int(area / (self.step**2))
-            
-            pos_absolute = [(0.0, 0.0)]  # 起始于原点
-            
-            # for i in range(1, points_count):
+            pos_absolute = [(0.0, 0.0)]
             i = 0
             while True:
                 i += 1
-                # 费马螺旋线参数方程
                 theta = i * golden_angle
+                
+                # 费马螺旋线半径公式 (保持您原有的逻辑)
+                # r 随 theta 的平方根增长
                 r = self.step * math.sqrt(theta)
                 
+                # 停止条件：如果半径超过了椭圆的长轴，停止生成
+                if r > max_r:
+                    break
                 
                 x = r * math.cos(theta)
                 y = r * math.sin(theta)
                 
-                # 检查是否超出扫描区域
-                if math.sqrt(x**2 + y**2) > scan_radius:
-                    break
-                    
-                pos_absolute.append((x, y))
+                # === 椭圆筛选 ===
+                # 标准椭圆方程: (x/a)^2 + (y/b)^2 <= 1
+                if (x / a)**2 + (y / b)**2 <= 1.0000001:
+                    pos_absolute.append((x, y))
         
         # 应用随机偏移（如果启用）
         pos_absolute = self._apply_random_offset(pos_absolute)
