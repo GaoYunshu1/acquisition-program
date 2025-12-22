@@ -294,7 +294,7 @@ class LogicWindow(ModernUI):
                 pass
 
     # --- 异步加载设备 ---
-    def start_init_camera(self):
+    def start_init_camera(self,success,result):
         self.btn_open_cam.setEnabled(True)
         if success:
             self.camera = result
