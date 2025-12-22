@@ -213,7 +213,7 @@ class ModernUI(QMainWindow):
         cam_layout = QGridLayout()
         
         cam_layout.addWidget(QLabel("曝光 (ms):"), 0, 0)
-        self.exposure_spin = QDoubleSpinBox("10.0")
+        self.exposure_spin = QDoubleSpinBox()
         self.exposure_spin.setRange(0.001, 10000);self.exposure_spin.setAlignment(Qt.AlignmentFlag.AlignRight)
         cam_layout.addWidget(self.exposure_spin, 0, 1)
         

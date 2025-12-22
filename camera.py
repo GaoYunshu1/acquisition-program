@@ -30,7 +30,6 @@ class Camera(ABC):
 
 class IDS(Camera):
     def __init__(self):
-
         # self.cam = uc480.UC480Camera(backend='ueye')
         super().__init__()
         print((uc480.list_cameras(backend='ueye')))
@@ -43,9 +42,6 @@ class IDS(Camera):
             self.cam.set_pixel_rate(pixel_rate)
         except Exception as e:
             print(f'设置pixel rate失败：{e}')
-
-    def get_color_mode(self):
-        return self.cam.get_color_mode()
 
     def set_color_mode(self, color_mode):
         try:
@@ -85,6 +81,32 @@ class IDS(Camera):
 
     def get_frame_period(self):
         return self.cam.get_frame_period()
+
+    def get_bit_depth(self):
+        try:
+            # 获取当前颜色模式 (IS_GET_COLOR_MODE = 0x8000)
+            mode = self.lib.is_SetColorMode(self.hcam, 0x8000)
+            # 根据 uc480/uEye 定义的常量映射位深
+            # 常用模式映射表:
+            # IS_CM_MONO8 (6), IS_CM_SENSOR_RAW8 (11) -> 8-bit
+            # IS_CM_MONO12 (26), IS_CM_SENSOR_RAW12 (27) -> 12-bit
+            # IS_CM_MONO16 (28), IS_CM_SENSOR_RAW16 (29) -> 16-bit
+            # IS_CM_MONO10 (34), IS_CM_SENSOR_RAW10 (33) -> 10-bit
+            
+            if mode in [6, 11, 1]:  # 8-bit
+                return 8
+            elif mode in [26, 27]:  # 12-bit
+                return 12
+            elif mode in [28, 29]:  # 16-bit
+                return 16
+            elif mode in [33, 34]:  # 10-bit
+                return 10
+            # 如果是其他模式 (如 RGB)，默认返回 8 (单通道) 或根据需要调整
+            return 8
+            
+        except Exception as e:
+            print(f"IDS get_bit_depth error: {e}")
+            return 16 # 默认防守值
     
 
 class Ham(Camera):
@@ -127,9 +149,22 @@ class Ham(Camera):
         except Exception as e:
             print(f'Ham获取图像失败：{e}')
 
-
     def get_frame_period(self):
         return self.cam.get_frame_period()
+
+    def get_bit_depth(self):
+        try:
+            # 尝试通过 DCAM 属性获取位深
+            # 属性ID: DCAM_IDPROP_BITSPERCHANNEL = 0x00420010 (这取决于 pylablib/dcam 的封装)
+            # 在 pylablib 中，通常可以直接访问 .get_attribute_value("bit_depth") 或类似
+            
+            # 如果是 pylablib.devices.DCAM
+            # 常见属性名: 'bit_depth', 'bits_per_channel'
+            val = self.cam.get_attribute_value("bit_depth")
+            return int(val)
+        except:
+            # 大多数滨松科学相机 (Flash 4.0等) 默认为 16-bit
+            return 16
 
 
 class Basler(Camera):
@@ -159,19 +194,15 @@ class Basler(Camera):
 
     def read_newest_image(self):
         """获取一幅图像"""
-
         try:
 
             if self.camera.IsGrabbing():
                 # 获取图像
                 grab_result = self.camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
-
                 # 获取图像数据（图像转换为NumPy数组）
                 image = grab_result.Array
                 # print(image.shape, np.unravel_index(np.argmax(image,keepdims=True),image.shape), np.mean(image),np.sort(np.unique(image))[-2],np.sort(np.unique(image))[-3])
-
                 return image
-
             else:
                 print("相机未准备好获取图像")
                 return None
@@ -236,6 +267,25 @@ class Basler(Camera):
         self.camera.Close()
         print("相机已关闭")
 
+    def get_bit_depth(self):
+        try:
+            # 获取 PixelFormat 字符串，例如 "Mono8", "Mono12", "Mono12Packed"
+            pixel_format = self.camera.PixelFormat.Value
+            
+            if "8" in pixel_format:
+                return 8
+            elif "10" in pixel_format:
+                return 10
+            elif "12" in pixel_format:
+                return 12
+            elif "16" in pixel_format: # 虽然少见，有些相机支持 Mono16
+                return 16
+            
+            return 8 # 默认值
+            
+        except Exception as e:
+            print(f"Basler get_bit_depth error: {e}")
+            return 8
 
 # class IC4Camera(Camera):
 #     class _NumpyCaptureListener(ic4.QueueSinkListener):

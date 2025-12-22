@@ -122,6 +122,10 @@ class PICamera(Camera):
                 return self.cam.get_exposure()
         return 0.1
 
+    def get_bit_depth(self):
+        # PICam 几乎总是 16-bit ADC
+        return 16
+
     def close(self):
         """关闭相机资源"""
         if self.cam:

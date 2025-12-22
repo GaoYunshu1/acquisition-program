@@ -8,80 +8,106 @@ class MotionController(ABC):
         super().__init__()
 
     @abstractmethod
-    def move_by(self, distance, axis):
+    def move_by(self, distance: float, axis: int):
+        """相对移动: distance (mm), axis (0=X, 1=Y)"""
+        pass
+
+    @abstractmethod
+    def move_to(self, position: float, axis: int):
+        """绝对移动: position (mm), axis (0=X, 1=Y)"""
+        pass
+
+    @abstractmethod
+    def get_position(self, axis: int) -> float:
+        """获取当前位置: return mm"""
         pass
 
 
 class smartact(MotionController):
     def __init__(self):
         super().__init__()
-        device = SmarAct.list_msc2_devices()
-        if len(device) == 0:
-            print('没有位移台')
-        else:
-            print(device[0])
-            self.motion = SmarAct.MCS2(device[0])
-
-    def home(self, axis=0):
-        self.motion.home(axis=axis)
+        try:
+            from pylablib.devices import SmarAct
+            devices = SmarAct.list_msc2_devices()
+            if not devices:
+                print('SmartAct: 未找到设备')
+                self.motion = None
+            else:
+                print(f'SmartAct: 连接到 {devices[0]}')
+                self.motion = SmarAct.MCS2(devices[0])
+        except Exception as e:
+            print(f'SmartAct 初始化失败: {e}')
+            self.motion = None
 
     def move_by(self, distance, axis=0):
-        self.motion.move_by(distance / 1000, axis=axis)
+        if self.motion:
+            # SmartAct 单位通常是米，这里做 mm -> m 转换
+            self.motion.move_by(distance / 1000.0, axis=axis)
 
-    def stop_all(self):
-        if self.motion.is_moving(axis=0):
-            self.motion.stop(axis=0)
-        if self.motion.is_moving(axis=1):
-            self.motion.stop(axis=1)
+    def move_to(self, position, axis=0):
+        if self.motion:
+            self.motion.move_to(position / 1000.0, axis=axis)
 
     def get_position(self, axis=0):
-        # pylablib 返回的是米，转换为毫米
-        return self.motion.get_position(axis) * 1000.0
+        if self.motion:
+            return self.motion.get_position(axis) * 1000.0
+        return 0.0
+
+    def home(self, axis=0):
+        if self.motion:
+            self.motion.home(axis=axis)
 
 class xps(MotionController):
-    def __init__(self, IP='192.168.254.254', username: str = 'Administrator', password: str = 'Administrator',
-                 port: int = 5001) -> None:
+    def __init__(self, ip='192.168.254.254', port=5001):
         super().__init__()
+        self.xps = None
+        self.groups = []
         try:
-            global NewportXPS
             from newportxps import NewportXPS
-            self.xps = NewportXPS(IP, username=username, password=password, port=port)
-            self.groups = []
+            # 注意: 用户名密码通常是 Administrator
+            self.xps = NewportXPS(ip, username='Administrator', password='Administrator', port=port)
+            print(f"XPS: 已连接到 {ip}")
         except Exception as e:
-            print(f'XPS 初始化失败{e}')
+            print(f'XPS 初始化失败: {e}')
 
-    def init_groups(self, groups: list = []):
-        try:
-            if groups:
-                for i in groups:
-                    self.xps.initialize_group(i)
-                    time.sleep(0.5)
-                    self.xps.home_group(i)
-                    # time.sleep(0.5)
-                    self.groups.append(i)
-        except Exception as e:
-            print(f'初始化xps异常，请检查是否重复初始化:{e}')
-            self.groups = groups
-            print
+    def init_groups(self, group_list=['Group3', 'Group4']):
+        """初始化轴组，Axis 0 对应 list[0], Axis 1 对应 list[1]"""
+        if not self.xps: return
+        self.groups = []
+        for g in group_list:
+            try:
+                self.xps.kill_group(g)       # 先Kill状态防止锁死
+                self.xps.initialize_group(g) # 再初始化
+                time.sleep(0.1)
+                self.xps.home_group(g)       # 建议初始化后回零一次
+                self.groups.append(g)
+                print(f"XPS: {g} 初始化完成")
+            except Exception as e:
+                print(f"XPS: {g} 初始化异常: {e}")
 
-    def init_all_groups(self):
-        self.xps.initialize_allgroups()
+    def _get_stage_name(self, axis):
+        """内部辅助: 获取 Group.Pos 字符串"""
+        if 0 <= axis < len(self.groups):
+            return f'{self.groups[axis]}.Pos'
+        return None
 
-    def stop_all(self):
-        for group in self.groups:
-            self.xps.kill_group(group)
-    
+    def move_by(self, distance, axis):
+        stage = self._get_stage_name(axis)
+        if stage and self.xps:
+            # relative=True 代表相对移动
+            self.xps.move_stage(stage, distance, relative=True)
+
+    def move_to(self, position, axis):
+        stage = self._get_stage_name(axis)
+        if stage and self.xps:
+            # relative=False 代表绝对移动
+            self.xps.move_stage(stage, position, relative=False)
+
     def get_position(self, axis):
-        if axis < len(self.groups):
-            group_name = self.groups[axis]
-            # 查询 .Pos 属性
-            return  GroupPositionCurrentGet(group_name, f'{group_name}.Pos')
-
-    def move_by(self, distance: int, axis: int, relative: bool = True):
-        try:
-            self.xps.move_stage(value=distance, stage=f'{self.groups[axis]}.Pos', relative=relative)
-        except Exception as e:
-            print(f'xps移动失败：{e}')
+        stage = self._get_stage_name(axis)
+        if stage and self.xps:
+            return self.xps.get_stage_position(stage)
+        return 0.0
 
     def status_report(self):
         return self.xps.status_report()
@@ -161,9 +187,6 @@ class nators(MotionController):
             print(f"在关闭系统时发生错误: {e}")
             return None
 
-    def get_position(self, axis):
-
-        return self._x if axis == 0 else self._y
     def call_nt_find_systems(self, options=""):
         """查找可用系统并返回系统定位符列表"""
         try:

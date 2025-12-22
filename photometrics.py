@@ -110,6 +110,13 @@ class PyVCAM(Camera):
         except Exception:
             pass
 
+    def get_bit_depth(self):
+        try:
+            # PyVCAM 通常直接有这个属性
+            return self.cam.bit_depth
+        except:
+            # 如果没有，尝试从 pixel format 推断
+            return 16
 
 if __name__ == "__main__":
     cam = PyVCAM()  # 自动检测并打开第1个相机

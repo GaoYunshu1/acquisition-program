@@ -301,6 +301,23 @@ class LucidCamera(Camera):
         except:
             pass
 
+    def get_bit_depth(self):
+        try:
+            # 读取 PixelFormat 节点
+            # 假设 self.cam 是设备对象，有 nodemap
+            # 伪代码: pf = self.cam.get_node("PixelFormat").value
+            
+            # 或者如果封装得比较好，可能有 pixel_format 属性
+            pf = self.cam.pixel_format 
+            
+            if "8" in pf: return 8
+            if "10" in pf: return 10
+            if "12" in pf: return 12
+            if "16" in pf: return 16
+            return 8
+        except:
+            return 12 # Lucid 工业相机常用 12-bit
+
 
 # 使用示例
 if __name__ == '__main__':

@@ -177,8 +177,6 @@ class LogicWindow(ModernUI):
     def __init__(self):
         super().__init__()
         sys.excepthook = self.handle_exception
-        self.timer = QTimer()
-        self.is_live = False
         
         # --- 1. 替换图像控件 ---
         old_layout = self.image_area.layout()
@@ -197,6 +195,7 @@ class LogicWindow(ModernUI):
         self.motion = None
         
         # 实时流定时器
+        self.timer = QTimer()
         self.is_live = False
         self.last_mouse_x = 0
         self.last_mouse_y = 0
@@ -296,42 +295,49 @@ class LogicWindow(ModernUI):
 
     # --- 异步加载设备 ---
     def start_init_camera(self):
-        cam_name = self.combo_camera.currentText()
-        self.log(f"正在初始化相机: {cam_name}...")
-        self.btn_open_cam.setEnabled(False)
-        self.loader_thread_cam = DeviceLoader('camera', cam_name)
-        self.loader_thread_cam.finished_signal.connect(self.on_camera_loaded)
-        self.loader_thread_cam.start()
-
-    def on_camera_loaded(self, success, result):
         self.btn_open_cam.setEnabled(True)
         if success:
             self.camera = result
             self.btn_open_cam.setText("已就绪")
             self.btn_open_cam.setStyleSheet("background-color: #4CAF50; color: white;")
-            self.set_exposure_time(self.exposure_spin.value())
+            
+            # 应用界面上的曝光时间
+            self.set_exposure_time()
 
+            # --- 获取位深逻辑 ---
+            bit_depth = 16  # 默认值
+            
             try:
-                if hasattr(self.camera, 'bit_depth'):
-                    bit_depth = int(self.camera.bit_depth)
-                elif hasattr(self.camera, 'get_bit_depth'):
+                # 1. 优先尝试标准的 get_bit_depth 方法 (IDS, Lucid等)
+                if hasattr(self.camera, 'get_bit_depth'):
                     bit_depth = int(self.camera.get_bit_depth())
-                elif hasattr(self.camera, 'BitDepth'): # 兼容某些SDK命名
+                
+                # 2. 尝试属性访问 (某些SDK直接暴露属性)
+                elif hasattr(self.camera, 'bit_depth'):
+                    bit_depth = int(self.camera.bit_depth)
+                elif hasattr(self.camera, 'BitDepth'):
                     bit_depth = int(self.camera.BitDepth)
+                
+                # 3. 如果是 IDS 且没读取到，尝试暴力读取 (不推荐，作为最后的 fallback)
+                elif self.combo_camera.currentText() == "IDS" and hasattr(self.camera, 'lib'):
+                     # 这里假设 camera 对象里有 lib 和 hcam
+                     mode = self.camera.lib.is_SetColorMode(self.camera.hcam, 0x8000)
+                     if mode in [26, 27]: bit_depth = 12
+                     elif mode in [28, 29]: bit_depth = 16
+                     elif mode in [6, 11]: bit_depth = 8
+                     
             except Exception as e:
                 self.log(f"获取位深失败，使用默认值 16: {e}")
 
+            # 计算饱和值
             self.saturation_value = (1 << bit_depth) - 1
             
-            # 4. 更新界面
+            # 更新界面
             self.line_cam_max.setText(f"{self.saturation_value} ({bit_depth}-bit)")
             self.log(f"相机就绪，位深: {bit_depth}, 饱和阈值: {self.saturation_value}")
             
         else:
             self.log(f"相机错误: {result}")
-
-    def get_color_mode(self):
-        return self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
 
     def start_init_motion(self):
         stage_name = self.combo_stage.currentText()

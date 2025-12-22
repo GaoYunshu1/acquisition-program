@@ -94,7 +94,23 @@ class IDSPeakCamera(Camera):
             buffer = self.datastream.AllocAndAnnounceBuffer(payload_size)
             self.datastream.QueueBuffer(buffer)
             self.buffers.append(buffer)
-
+    
+    def get_bit_depth(self):
+        try:
+            # IDS Peak Python SDK 访问节点
+            # remote_device = self.device.RemoteDevice()
+            # pixel_format = remote_device.NodeMaps()[0].FindNode("PixelFormat").CurrentEntry().SymbolicValue()
+            
+            # 简化假设，如果您的封装类有名为 pixel_format 的属性
+            pf = self.cam.PixelFormat.Value() # 假设写法
+            
+            if "8" in pf: return 8
+            if "10" in pf: return 10
+            if "12" in pf: return 12
+            return 8
+        except:
+            return 12 # 默认
+            
     def set_ex_time(self, ex_time):
         """设置曝光时间, ex_time: 秒"""
         # 转换为微秒
