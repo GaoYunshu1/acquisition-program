@@ -350,7 +350,6 @@ class LogicWindow(ModernUI):
         """Get a list of all available color modes"""
         return self._all_color_modes
 
-    @interface.use_parameters(_returns="color_mode")
     def get_color_mode(self):
         return self.lib.is_SetColorMode(self.hcam, uc480_defs.COLORMODE.IS_GET_COLOR_MODE)
 
