@@ -143,13 +143,9 @@ class Scanner:
         elif self.mode == 'fermat':
             # === 费马螺旋模式 (支持椭圆) ===
             
-            # 1. 计算半轴长 (a: X轴半径, b: Y轴半径)
-            a = self.scan_range_x / 2.0
-            b = self.scan_range_y / 2.0
-            
             # 2. 确定最大生成半径
             # 为了覆盖整个椭圆，必须生成到长轴的长度，然后再裁剪
-            max_r = max(a, b)
+            max_r = max(self.scan_range_x, self.scan_range_y)
             
             # 3. 黄金角 (保持您原有的参数逻辑)
             golden_angle = math.pi / self.nth

@@ -633,16 +633,39 @@ class LogicWindow(ModernUI):
         phys_axis = 0
         phys_dist = delta
         
-        if logical_axis_idx == 0: # X
+        # 1. 获取当前 UI 上显示的数值（转换为 float）
+        try:
+            curr_x_val = float(self.stage_widget.target_x.text())
+        except ValueError: 
+            curr_x_val = 0.0
+            
+        try:
+            curr_y_val = float(self.stage_widget.target_y.text())
+        except ValueError: 
+            curr_y_val = 0.0
+
+        # 2. 计算并更新逻辑坐标
+        if logical_axis_idx == 0: # X 轴移动
             phys_axis = 1 if is_swap else 0
             if inv_x: phys_dist *= -1
-            self.stage_widget.target_x.setText(f"{self.stage_widget.target_x.text()}{delta:.3f}")
-        else: # Y
+            
+            # 【修正】数值加法
+            new_val = curr_x_val + delta
+            self.stage_widget.target_x.setText(f"{new_val:.3f}")
+            
+        else: # Y 轴移动
             phys_axis = 0 if is_swap else 1
             if inv_y: phys_dist *= -1
-            self.stage_widget.target_y.setText(f"{self.stage_widget.target_y.text()}{delta:.3f}")
             
-        self.motion.move_by(phys_dist, axis=phys_axis)
+            # 【修正】数值加法
+            new_val = curr_y_val + delta
+            self.stage_widget.target_y.setText(f"{new_val:.3f}")
+            
+        # 3. 执行物理移动
+        if self.motion:
+            self.motion.move_by(phys_dist, axis=phys_axis)
+        
+        # 4. 更新显示 (或者直接调用 self.sync_hardware_position() 更准确)
         self.update_stage_display()
 
     def zero_stage(self):
@@ -747,19 +770,17 @@ class LogicWindow(ModernUI):
             return False
 
         # 2. 构造提示文本
-        msg_text = (f"即将保存数据！\n\n"
-                    f"当前保存目录为：\n"
-                    f"【 {current_dir} 】\n\n"
-                    f"请确认目录名称是否正确？")
+        msg_text = (f"请更改目录")
         
         # 3. 弹出对话框
-        reply = QMessageBox.question(
-            self, 
-            "目录检查", 
-            msg_text,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No  # 默认选中 No，防止手滑
-        )
+        if current_dir == self.default_save_dir:
+            reply = QMessageBox.question(
+                self, 
+                "目录检查", 
+                msg_text,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No  # 默认选中 No，防止手滑
+            )
         
         if reply == QMessageBox.StandardButton.Yes:
             # 确认后，同步更新内部变量，并确保目录存在
@@ -842,8 +863,8 @@ class LogicWindow(ModernUI):
                     
                 if roi_img is not None:
                     if not filename:
-                        filename = f"capture_{int(time.time())}.png"
-                        path = os.path.join(self.save_dir, filename)
+                        filename = f"dark.png"
+                    path = os.path.join(self.save_dir, filename)
                     if not os.path.exists(self.save_dir): os.makedirs(self.save_dir)
                             
                     # 保存
