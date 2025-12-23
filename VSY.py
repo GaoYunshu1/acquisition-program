@@ -156,7 +156,7 @@ class VSyCamera(Camera):
     def _initialize_camera(self):
         """初始化相机连接"""
         # 加载动态库（路径需要根据实际环境调整）
-        self.VsyGevLib = cdll.LoadLibrary("E:/hongwai/VsyCamGigE/sdk/samples/PYTHON/Bin/x64/Release/VsyGigECam.dll")
+        self.VsyGevLib = cdll.LoadLibrary("C:/Users/JKHKOJKLJ/Documents/GitHub/acquisition-program/dll/vsy/VsyCameraControl.dll")
         self.VsyGevLib.VSY_GigECam_SetFeature.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_double, ctypes.c_ushort]
 
         # 搜索设备

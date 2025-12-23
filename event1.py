@@ -57,17 +57,17 @@ class DeviceLoader(QThread):
                     device_instance.start_acquisition()
 
             elif self.device_type == 'stage':
-                if self.device_name == "SmartAct":
-                    from motion_controller import smartact
-                    device_instance = smartact()
+                if self.device_name == "NewPort":
+                    from motion_controller import xps
+                    device_instance = xps(IP='192.168.0.254')
+                    device_instance.init_groups(['Group3', 'Group4'])
                 elif self.device_name == "Nators":
                     from motion_controller import nators
                     device_instance = nators(ip_address="192.168.0.254")
                     device_instance.open_system()
-                elif self.device_name == "NewPort":
-                    from motion_controller import xps
-                    device_instance = xps(IP='192.168.0.254')
-                    device_instance.init_groups(['Group3', 'Group4'])
+                elif self.device_name == "SmartAct":
+                    from motion_controller import smartact
+                    device_instance = smartact()
 
             if device_instance:
                 self.finished_signal.emit(True, device_instance)
@@ -201,7 +201,8 @@ class LogicWindow(ModernUI):
         self.last_mouse_x = 0
         self.last_mouse_y = 0
         self.image_view.mouse_hover_signal.connect(self.on_mouse_moved)
-        self.save_dir = "please change this to your own path"
+        self.default_save_dir = "please change this to your own path"
+        self.save_dir = self.default_save_dir
 
         # --- 3. 信号绑定 ---
         self.btn_open_cam.clicked.connect(self.start_init_camera)
@@ -226,31 +227,52 @@ class LogicWindow(ModernUI):
         self.exposure_spin.valueChanged.connect(self.set_exposure_time)
 
     def handle_exception(self, exc_type, exc_value, exc_traceback):
-        """
-        全局异常捕获函数：
-        当发生未捕获的异常时，自动触发此函数
-        """
-        # 如果是键盘中断 (Ctrl+C)，则交给系统默认处理，方便开发时强制结束
+        """全局异常捕获"""
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
 
-        # 1. 获取完整的错误堆栈字符串
         error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-        
-        # 2. 依然打印到控制台 (方便开发者在 IDE 调试)
         print(error_msg, file=sys.stderr)
         
-        # 3. 显示到界面日志 (使用红色高亮)
-        # 使用 HTML 格式让报错更显眼
         header = f"⛔ 【系统崩溃/错误】 {exc_type.__name__}: {exc_value}"
-        self.log_html(f"<font color='#FF4444'><b>{header}</b><br><pre>{error_msg}</pre></font>")
+        self.log_error(header + "\n" + error_msg)
 
-    def log_html(self, html_msg):
-        """辅助函数：支持 HTML 格式的日志插入"""
-        self.txt_log.append(html_msg)
-        # 自动滚动到底部
-        self.txt_log.verticalScrollBar().setValue(self.txt_log.verticalScrollBar().maximum())
+    # =====================================================
+    # 【新增】改进的日志函数
+    # =====================================================
+    def log_info(self, msg):
+        """信息日志 - 蓝色"""
+        timestamp = time.strftime("%H:%M:%S")
+        html = f"<span style='color:#2196F3;'><b>[{timestamp}]</b> ℹ️ {msg}</span>"
+        self.txt_log.append(html)
+        self._scroll_to_bottom()
+    
+    def log_success(self, msg):
+        """成功日志 - 绿色"""
+        timestamp = time.strftime("%H:%M:%S")
+        html = f"<span style='color:#4CAF50;'><b>[{timestamp}]</b> ✅ {msg}</span>"
+        self.txt_log.append(html)
+        self._scroll_to_bottom()
+    
+    def log_warning(self, msg):
+        """警告日志 - 橙色"""
+        timestamp = time.strftime("%H:%M:%S")
+        html = f"<span style='color:#FF9800;'><b>[{timestamp}]</b> ⚠️ {msg}</span>"
+        self.txt_log.append(html)
+        self._scroll_to_bottom()
+    
+    def log_error(self, msg):
+        """错误日志 - 红色"""
+        timestamp = time.strftime("%H:%M:%S")
+        html = f"<span style='color:#F44336;'><b>[{timestamp}]</b> ❌ {msg}</span>"
+        self.txt_log.append(html)
+        self._scroll_to_bottom()
+
+    def _scroll_to_bottom(self):
+        """自动滚动到底部"""
+        scrollbar = self.txt_log.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
     def on_mouse_moved(self, x, y, val):
         if x >= 0 and y >= 0:
@@ -349,15 +371,13 @@ class LogicWindow(ModernUI):
                 success = True
             
             # 2. 针对特定控制器的特殊处理 (XPS, SmartAct)
-            if not success:
-                # XPS 处理逻辑 (保持你原有的)
-                if hasattr(self.motion, 'xps') and hasattr(self.motion, 'groups'):
-                    if len(self.motion.groups) >= 2:
-                        g0 = self.motion.groups[0]
-                        g1 = self.motion.groups[1]
-                        hw_x = self.motion.xps.get_stage_position(f'{g0}.Pos')
-                        hw_y = self.motion.xps.get_stage_position(f'{g1}.Pos')
-                        success = True
+            elif hasattr(self.motion, 'xps') and hasattr(self.motion, 'groups'):
+                if len(self.motion.groups) >= 2:
+                    g0 = self.motion.groups[0]
+                    g1 = self.motion.groups[1]
+                    hw_x = self.motion.xps.get_stage_position(f'{g0}.Pos')
+                    hw_y = self.motion.xps.get_stage_position(f'{g1}.Pos')
+                    success = True
                 
             if success:
                 # [关键] 这里更新显示的 Label，而不是 Target 输入框
@@ -376,12 +396,12 @@ class LogicWindow(ModernUI):
                 self.stage_widget.target_x.blockSignals(False)
                 self.stage_widget.target_y.blockSignals(False)
             else:
-                pass
+                self.log_warning("无法同步硬件位置")
 
         except Exception as e:
             self.stage_widget.target_x.blockSignals(False)
             self.stage_widget.target_y.blockSignals(False)
-            self.log(f"同步位置异常: {e}")
+            self.log_error(f"同步位置异常: {e}")
 
 
     # --- 图像处理核心逻辑 ---
@@ -488,13 +508,11 @@ class LogicWindow(ModernUI):
                     self.last_mouse_y = h // 2
             
             except Exception as e:
-                # 调试时可以打印，稳定后注释掉
-                # print(f"Update Frame Error: {e}")
                 pass
 
     def toggle_live(self):
         if not self.camera:
-            self.log("请先连接并初始化相机！")
+            self.log_warning("请先连接并初始化相机！")
             return
 
         if self.is_live:
@@ -505,7 +523,7 @@ class LogicWindow(ModernUI):
             # 更新按钮样式
             self.btn_live.setText("👁 启动")
             self.btn_live.setStyleSheet("background:#27ae60;color:white;font-weight:bold;")
-            self.log("实时显示已停止")
+            self.log_info("实时显示已停止")
             
         else:
             # 根据您相机的曝光时间，这个值可以调整，比如 30 或 100
@@ -518,27 +536,27 @@ class LogicWindow(ModernUI):
             # 更新按钮样式
             self.btn_live.setText("⬛ 停止")
             self.btn_live.setStyleSheet("background:#7f8c8d;color:white;font-weight:bold;")
-            self.log("实时显示已启动")
+            self.log_success("实时显示已启动")
 
     def calculate_center(self):
         if not self.camera:
-            self.log("相机未连接")
+            self.log_warning("相机未连接")
             return
         img = self.camera.read_newest_image()
         if img is None: 
-            self.log("无法获取图像用于计算")
+            self.log_warning("无法获取图像用于计算")
             return
         h_full, w_full = img.shape
         threshold = np.mean(img) + np.std(img) * 2
         mask = img > threshold
         if np.sum(mask) == 0:
-            self.log("图像过暗，无法寻找中心")
+            self.log_warning("图像过暗，无法寻找中心")
             return
         y_indices, x_indices = np.indices(img.shape)
         total_mass = np.sum(img[mask])
         center_x = np.sum(x_indices[mask] * img[mask]) / total_mass
         center_y = np.sum(y_indices[mask] * img[mask]) / total_mass
-        self.log(f"检测到质心: ({center_x:.1f}, {center_y:.1f})")
+        self.log_success(f"检测到质心: ({center_x:.1f}, {center_y:.1f})")
         
         sensor_cx = w_full / 2
         sensor_cy = h_full / 2
@@ -547,8 +565,8 @@ class LogicWindow(ModernUI):
         
         self.off_x.setValue(offset_x)
         self.off_y.setValue(offset_y)
-        self.log(f"已更新偏移量: X={offset_x}, Y={offset_y}")
-
+        self.log_success(f"已更新偏移量: X={offset_x}, Y={offset_y}")
+        
     # --- 位移台逻辑 ---
     def update_stage_display(self):
         self.stage_widget.lbl_x.setText(f"X: {self.stage_widget.target_x.text()} mm")
@@ -556,7 +574,7 @@ class LogicWindow(ModernUI):
 
     def move_stage_manual(self, axis_name, direction):
         if not self.motion:
-            self.log("位移台未连接")
+            self.log_warning("位移台未连接")
             return
         stage_step = self.stage_widget.step_spin.value()
         is_swap = self.stage_widget.check_swap.isChecked()
@@ -578,7 +596,7 @@ class LogicWindow(ModernUI):
             self.sync_hardware_position()
             
         except Exception as e:
-            self.log(f"移动失败: {e}")
+            self.log_error(f"移动失败: {e}")
 
     def move_stage_absolute(self):
         if not self.motion: return
@@ -586,10 +604,10 @@ class LogicWindow(ModernUI):
             target_x = float(self.stage_widget.target_x.text())
             target_y = float(self.stage_widget.target_y.text())
         except ValueError:
-            self.log("坐标输入格式错误")
+            self.log_error("坐标输入格式错误，请输入数字")
             return
         
-        self.log(f"移动至绝对位置: ({target_x}, {target_y})...")
+        self.log_success(f"移动至绝对位置: ({target_x}, {target_y})...")
         
         try:
             # 方案 A: 优先使用绝对移动接口 (更准)
@@ -621,9 +639,10 @@ class LogicWindow(ModernUI):
 
             # 无论哪种方式，移动完最后都要同步显示
             self.sync_hardware_position()
-
+            self.log_success(f"移动完成")
+                
         except Exception as e:
-            self.log(f"绝对移动失败: {e}")
+            self.log_error(f"绝对移动失败: {e}")
 
     def _move_logical_delta(self, delta, logical_axis_idx):
         is_swap = self.stage_widget.check_swap.isChecked()
@@ -670,10 +689,10 @@ class LogicWindow(ModernUI):
 
     def zero_stage(self):
         if not self.motion:
-            self.log("位移台未连接")
+            self.log_warning("位移台未连接")
             return
 
-        self.log("正在执行回零操作 (Move to Absolute 0)...")
+        self.log_info("正在执行回零操作 (Move to Absolute 0)...")
         try:
             # 尝试调用硬件的绝对移动接口
             # 假设驱动通过 move_to(position, axis) 实现
@@ -683,11 +702,11 @@ class LogicWindow(ModernUI):
             
             # 移动完成后，同步硬件位置显示
             self.sync_hardware_position()
-            self.log("回零完成")
+            self.log_success("回零完成")
             
         except AttributeError:
             # 如果驱动没有 move_to，尝试其他常见命名
-            self.log("驱动未提供标准 move_to 接口，尝试 set_position 0...")
+            self.log_warning("驱动未提供标准 move_to 接口，尝试 set_position 0...")
             try:
                 # 某些驱动可能是 set_position
                 if hasattr(self.motion, 'move_absolute'):
@@ -695,9 +714,9 @@ class LogicWindow(ModernUI):
                     self.motion.move_absolute(0.0, axis=1)
                     self.sync_hardware_position()
             except Exception as e:
-                self.log(f"回零失败: {e}")
+                self.log_error(f"回零失败: {e}")
         except Exception as e:
-            self.log(f"回零异常: {e}")
+            self.log_error(f"回零异常: {e}")
 
     def preview_scan_path(self):
         try:
@@ -727,7 +746,7 @@ class LogicWindow(ModernUI):
             # 5. 更新 UI 上的采集点数显示
             total_points = len(self.scanner.x)
             self.scan_points.setText(str(total_points))
-            self.log(f"生成扫描路径: {ui_mode_text}, 总点数: {total_points}")
+            self.log_success(f"生成扫描路径: {ui_mode_text}, 总点数: {total_points}")
 
             # 6. 绘制预览
             plt.style.use('default')
@@ -753,7 +772,7 @@ class LogicWindow(ModernUI):
             self.lbl_scan_preview.setScaledContents(True)
 
         except Exception as e:
-            self.log(f"生成路径失败: {e}")
+            self.log_error(f"生成路径失败: {e}")
             import traceback
             traceback.print_exc()
 
@@ -762,52 +781,56 @@ class LogicWindow(ModernUI):
         弹出确认框，询问用户目录是否正确。
         返回: True (用户点Yes), False (用户点No)
         """
-        current_dir = self.save_dir_edit.text()
+        current_dir = self.save_dir_edit.text().strip()
         
-        # 1. 如果目录为空，提示错误
-        if not current_dir.strip():
-            QMessageBox.warning(self, "路径错误", "保存目录不能为空！")
+        # 1. 检查是否为空
+        if not current_dir:
+            QMessageBox.warning(self, "路径错误", "保存目录不能为空!")
             return False
-
-        # 2. 构造提示文本
-        msg_text = (f"请更改目录")
         
-        # 3. 弹出对话框
+        # 2. 检查是否还是默认值
         if current_dir == self.default_save_dir:
-            reply = QMessageBox.question(
+            reply = QMessageBox.warning(
                 self, 
-                "目录检查", 
-                msg_text,
+                "⚠️ 目录未更改", 
+                f"当前保存目录仍为默认值:\n\n{current_dir}\n\n"
+                "请点击 [...] 按钮选择正确的保存目录。\n\n"
+                "是否继续使用默认目录? (不推荐)",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No  # 默认选中 No，防止手滑
+                QMessageBox.StandardButton.No
             )
+            
+            if reply == QMessageBox.StandardButton.No:
+                self.log_warning("操作已取消 - 请修改保存目录")
+                return False
         
-        if reply == QMessageBox.StandardButton.Yes:
-            # 确认后，同步更新内部变量，并确保目录存在
-            self.save_dir = current_dir
-            if not os.path.exists(self.save_dir):
-                try:
-                    os.makedirs(self.save_dir)
-                except Exception as e:
-                    QMessageBox.critical(self, "错误", f"无法创建目录：\n{e}")
-                    return False
-            return True
-        else:
-            self.log("操作已取消。")
-            return False
+        # 3. 更新并确保目录存在
+        self.save_dir = current_dir
+        if not os.path.exists(self.save_dir):
+            try:
+                os.makedirs(self.save_dir)
+                self.log_success(f"已创建目录: {self.save_dir}")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"无法创建目录:\n{e}")
+                return False
+        
+        return True
 
     def start_scan(self):
         # 扫描前强制重新生成一次，确保参数是最新的
+        if not self.confirm_directory():
+            return
+
         self.preview_scan_path()
         
         if not getattr(self, 'scanner', None): 
-            self.log("扫描器未初始化，请先点击'显示/更新扫描路径'")
+            self.log_error("扫描器未初始化，请先点击'显示/更新扫描路径'")
             return
         
         if not self.confirm_directory():
             return
         
-        self.log(f"开始采集 {len(self.scanner.x)} 点...")
+        self.log_info(f"开始采集 {len(self.scanner.x)} 点...")
         self.scan_idx = 0
         self.scan_timer = QTimer()
         self.scan_timer.timeout.connect(self._scan_step)
@@ -816,7 +839,7 @@ class LogicWindow(ModernUI):
     def _scan_step(self):
         if self.scan_idx >= len(self.scanner.x):
             self.scan_timer.stop()
-            self.log("扫描完成")
+            self.log_success("扫描完成")
             final_x = self.scanner.final_pos[0]
             final_y = self.scanner.final_pos[1]
             self._move_logical_delta(-final_x, 0)
@@ -846,10 +869,24 @@ class LogicWindow(ModernUI):
 
     def on_manual_save(self):
         """响应界面上的'保存'按钮点击"""
-        # 1. 先弹窗确认
-        if self.confirm_directory():
-            # 2. 确认通过后，才执行保存
-            self.save_current_frame()
+        # 1. 检查目录
+        if not self.check_and_confirm_directory():
+            return
+        
+        # 2. 弹窗输入文件名
+        default_name = f"image_{time.strftime('%Y%m%d_%H%M%S')}.png"
+        filename, ok = QInputDialog.getText(
+            self,
+            "保存图像",
+            "请输入文件名 (含扩展名):",
+            text=default_name
+        )
+        
+        if ok and filename.strip():
+            # 3. 执行保存
+            self.save_current_frame(filename=filename.strip())
+        else:
+            self.log_info("保存已取消")
 
     def save_current_frame(self, filename=None):
         if self.camera:
@@ -870,10 +907,10 @@ class LogicWindow(ModernUI):
                     # 保存
                     img_pil = Image.fromarray(roi_img)
                     img_pil.save(path)
-                    self.log(f"Saved ROI: {filename} ({roi_img.shape})")
+                    self.log_success(f"Saved ROI: {filename} ({roi_img.shape})")
                     
             except Exception as e:
-                self.log(f"保存当前帧失败: {e}")
+                self.log_error(f"保存当前帧失败: {e}")
                 import traceback
                 traceback.print_exc()
 

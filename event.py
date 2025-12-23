@@ -10,8 +10,9 @@ import sys
 
 from gui_simple import Ui_MainWindow
 from camera import IDS, Ham
-from VSY import VSyCamera as vsy
-from VSY import VsyGvspPixelType
+# from VSY import VSyCamera as vsy
+# from VSY import VsyGvspPixelType
+from new_vsy_camera import NewVSyCamera
 from motion_controller import xps, smartact, nators
 import numpy as np
 from PIL import Image
