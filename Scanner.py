@@ -169,7 +169,7 @@ class Scanner:
                 
                 # === 椭圆筛选 ===
                 # 标准椭圆方程: (x/a)^2 + (y/b)^2 <= 1
-                if (x / a)**2 + (y / b)**2 <= 1.0000001:
+                if (x / self.scan_range_x)**2 + (y / self.scan_range_y)**2 <= 1.0000001:
                     pos_absolute.append((x, y))
         
         # 应用随机偏移（如果启用）

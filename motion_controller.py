@@ -78,9 +78,6 @@ class xps(MotionController):
             try:
                 self.xps.kill_group(g)       # 先Kill状态防止锁死
                 self.xps.initialize_group(g) # 再初始化
-                time.sleep(0.1)
-                self.xps.home_group(g)       # 建议初始化后回零一次
-                self.groups.append(g)
                 print(f"XPS: {g} 初始化完成")
             except Exception as e:
                 print(f"XPS: {g} 初始化异常: {e}")
