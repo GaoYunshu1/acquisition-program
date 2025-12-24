@@ -74,13 +74,25 @@ class xps(MotionController):
         """初始化轴组，Axis 0 对应 list[0], Axis 1 对应 list[1]"""
         if not self.xps: return
         self.groups = []
-        for g in group_list:
-            try:
-                self.xps.kill_group(g)       # 先Kill状态防止锁死
-                self.xps.initialize_group(g) # 再初始化
-                print(f"XPS: {g} 初始化完成")
-            except Exception as e:
-                print(f"XPS: {g} 初始化异常: {e}")
+        for g in group_names:
+            # 1. 先读取当前状态
+            # 注意：GroupStatusGet 返回的通常是一个状态码或字符串
+            status = self.xps.GroupStatusGet(self.socketId, g)
+            
+            # 2. 判断是否已经 Ready (通常状态码 10-12 代表 Ready，视具体 API 而定)
+            # 如果您的封装返回的是字符串 'Ready'
+            if status == 'Ready' or str(status) == '11' or str(status) == '12':
+                print(f"轴组 {g} 已经是 Ready 状态，跳过初始化，保持当前位置。")
+                self.groups.append(g)
+                continue # 跳过后面步骤，直接下一个轴
+            
+            # 3. 如果没 Ready，再执行那一套繁琐的流程
+            print(f"轴组 {g} 未就绪 (状态: {status})，开始初始化...")
+            self.xps.kill_group(g)       # 先Kill状态防止锁死
+            self.xps.initialize_group(g) # 再初始化
+            self.xps.homeSearch(g)
+            self.groups.append(g)
+            print(f"XPS: {g} 初始化完成")
 
     def _get_stage_name(self, axis):
         """内部辅助: 获取 Group.Pos 字符串"""

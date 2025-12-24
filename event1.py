@@ -785,16 +785,17 @@ class LogicWindow(ModernUI):
             reply = QMessageBox.warning(
                 self, 
                 "⚠️ 目录未更改", 
-                f"当前保存目录仍为默认值:\n\n{current_dir}\n\n"
-                "请点击 [...] 按钮选择正确的保存目录。\n\n"
-                "是否继续使用默认目录? (不推荐)",
+                "请修改保存目录!",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
             
-            if reply == QMessageBox.StandardButton.No:
-                self.log_warning("操作已取消 - 请修改保存目录")
+        if reply == QMessageBox.StandardButton.Yes:
+                # 假设 Yes 意味着 "我要去改"，则返回 False 阻止采集
                 return False
+        else:
+            # No 意味着取消操作
+            return False
         
         # 3. 更新并确保目录存在
         self.save_dir = current_dir
@@ -863,7 +864,7 @@ class LogicWindow(ModernUI):
     def on_manual_save(self):
         """响应界面上的'保存'按钮点击"""
         # 1. 检查目录
-        if not self.check_and_confirm_directory():
+        if not self.confirm_directory():
             return
         
         default_name = f"image_{time.strftime('%H%M%S')}.h5"
