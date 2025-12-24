@@ -9,3 +9,5 @@ __pycache__/
 *.ipr
 *.iws
 *.png
+*.json
+*.mat
