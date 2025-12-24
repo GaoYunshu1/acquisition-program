@@ -6,6 +6,7 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 import traceback
+import h5py
 
 # PyQt6 导入
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QVBoxLayout, QFileDialog, QMessageBox
@@ -294,7 +295,7 @@ class LogicWindow(ModernUI):
     def start_init_camera(self):
         """步骤1: 仅仅负责启动线程"""
         cam_name = self.combo_camera.currentText()
-        self.log(f"正在初始化相机: {cam_name}...")
+        self.log_info(f"正在初始化相机: {cam_name}...")
         self.btn_open_cam.setEnabled(False) # 禁用按钮防止重复点击
         
         # 创建并启动线程
@@ -326,20 +327,20 @@ class LogicWindow(ModernUI):
                 elif hasattr(self.camera, 'BitDepth'):
                     bit_depth = int(self.camera.BitDepth)
             except Exception as e:
-                self.log(f"获取位深失败，使用默认值 16: {e}")
+                self.log_warning(f"获取位深失败，使用默认值 16: {e}")
 
             # 3. 计算饱和值
             self.saturation_value = (1 << bit_depth) - 1
             
             self.line_cam_max.setText(f"{self.saturation_value} ({bit_depth}-bit)")
-            self.log(f"相机就绪 | 位深: {bit_depth} | 饱和阈值: {self.saturation_value}")
+            self.log_success(f"相机就绪 | 位深: {bit_depth} | 饱和阈值: {self.saturation_value}")
             
         else:
-            self.log(f"相机初始化失败: {result}")
+            self.log_error(f"相机初始化失败: {result}")
 
     def start_init_motion(self):
         stage_name = self.combo_stage.currentText()
-        self.log(f"正在连接位移台: {stage_name}...")
+        self.log_info(f"正在连接位移台: {stage_name}...")
         self.btn_connect_stage.setEnabled(False)
         self.loader_thread_stage = DeviceLoader('stage', stage_name)
         self.loader_thread_stage.finished_signal.connect(self.on_motion_loaded)
@@ -350,11 +351,11 @@ class LogicWindow(ModernUI):
         if success:
             self.motion = result
             self.btn_connect_stage.setText("已连接")
-            self.log("位移台连接成功")
+            self.log_success("位移台连接成功")
             
             self.sync_hardware_position() 
         else:
-            self.log(f"位移台错误: {result}")
+            self.log_error(f"位移台错误: {result}")
 
     def sync_hardware_position(self):
         """标准逻辑：读取硬件当前的绝对位置更新到软件"""
@@ -417,7 +418,7 @@ class LogicWindow(ModernUI):
             target_h = 1024
 
         if target_w >= w_full and target_h >= h_full:
-            self.log("ROI 大于等于图像尺寸，无需裁剪")
+            self.log_info("ROI 大于等于图像尺寸，无需裁剪")
             return full_image
 
         try:
@@ -644,7 +645,12 @@ class LogicWindow(ModernUI):
         except Exception as e:
             self.log_error(f"绝对移动失败: {e}")
 
-    def _move_logical_delta(self, delta, logical_axis_idx):
+    def _move_logical_delta(self, delta, logical_axis_idx): 
+        """
+        执行相对移动，并在移动后直接读取硬件位置更新界面。
+        不再使用 target_x.text() + delta 这种不靠谱的字符串加减。
+        """
+        # 1. 获取轴映射设置
         is_swap = self.stage_widget.check_swap.isChecked()
         inv_x = self.stage_widget.check_inv_x.isChecked()
         inv_y = self.stage_widget.check_inv_y.isChecked()
@@ -652,40 +658,27 @@ class LogicWindow(ModernUI):
         phys_axis = 0
         phys_dist = delta
         
-        # 1. 获取当前 UI 上显示的数值（转换为 float）
-        try:
-            curr_x_val = float(self.stage_widget.target_x.text())
-        except ValueError: 
-            curr_x_val = 0.0
-            
-        try:
-            curr_y_val = float(self.stage_widget.target_y.text())
-        except ValueError: 
-            curr_y_val = 0.0
-
-        # 2. 计算并更新逻辑坐标
-        if logical_axis_idx == 0: # X 轴移动
+        # 2. 计算物理轴和方向
+        if logical_axis_idx == 0: # 逻辑 X 轴
             phys_axis = 1 if is_swap else 0
             if inv_x: phys_dist *= -1
-            
-            # 【修正】数值加法
-            new_val = curr_x_val + delta
-            self.stage_widget.target_x.setText(f"{new_val:.3f}")
-            
-        else: # Y 轴移动
+        else: # 逻辑 Y 轴
             phys_axis = 0 if is_swap else 1
             if inv_y: phys_dist *= -1
             
-            # 【修正】数值加法
-            new_val = curr_y_val + delta
-            self.stage_widget.target_y.setText(f"{new_val:.3f}")
-            
         # 3. 执行物理移动
         if self.motion:
-            self.motion.move_by(phys_dist, axis=phys_axis)
-        
-        # 4. 更新显示 (或者直接调用 self.sync_hardware_position() 更准确)
-        self.update_stage_display()
+            try:
+                # 发送移动指令
+                self.motion.move_by(phys_dist, axis=phys_axis)
+                
+                # 可选：如果电机响应慢，可以加一点微小的延时，确保读回来的是移动后的值
+                # time.sleep(0.05) 
+                
+                self.sync_hardware_position()
+                
+            except Exception as e:
+                self.log_error(f"相对移动失败: {e}")
 
     def zero_stage(self):
         if not self.motion:
@@ -773,7 +766,6 @@ class LogicWindow(ModernUI):
 
         except Exception as e:
             self.log_error(f"生成路径失败: {e}")
-            import traceback
             traceback.print_exc()
 
     def confirm_directory(self):
@@ -851,15 +843,16 @@ class LogicWindow(ModernUI):
         
         self._move_logical_delta(dx, 0)
         self._move_logical_delta(dy, 1)
-            
-        self.save_current_frame(filename=f"scan_{self.scan_idx}.png")
+        
+        # time.sleep(0.5)
+        self.save_current_frame(filename=f"scan_{self.scan_idx}.h5")
         self.scan_idx += 1
 
     def set_exposure_time(self):
         if self.camera:
             val = self.exposure_spin.value()
             self.camera.set_ex_time(val / 1000.0)
-            self.log(f"曝光: {val} ms")
+            self.log_info(f"曝光: {val} ms")
 
     def select_folder(self):
         path = QFileDialog.getExistingDirectory(self, "选择保存目录")
@@ -873,18 +866,22 @@ class LogicWindow(ModernUI):
         if not self.check_and_confirm_directory():
             return
         
-        # 2. 弹窗输入文件名
-        default_name = f"image_{time.strftime('%Y%m%d_%H%M%S')}.png"
+        default_name = f"image_{time.strftime('%H%M%S')}.h5"
+        
         filename, ok = QInputDialog.getText(
             self,
-            "保存图像",
-            "请输入文件名 (含扩展名):",
+            "保存单帧数据",
+            "请输入文件名:",
             text=default_name
         )
         
         if ok and filename.strip():
-            # 3. 执行保存
-            self.save_current_frame(filename=filename.strip())
+            final_name = filename.strip()
+            # 强制加上 .h5 后缀，如果用户没写
+            if not final_name.endswith('.h5') and not final_name.endswith('.png'):
+                final_name += '.h5'
+                
+            self.save_current_frame(filename=final_name)
         else:
             self.log_info("保存已取消")
 
@@ -899,18 +896,60 @@ class LogicWindow(ModernUI):
                 roi_img = self.crop_image(full_img)
                     
                 if roi_img is not None:
+                    # 准备路径
                     if not filename:
-                        filename = f"dark.png"
+                        filename = f"temp.png"
                     path = os.path.join(self.save_dir, filename)
                     if not os.path.exists(self.save_dir): os.makedirs(self.save_dir)
+
+                    # === 分支 A: 如果是 HDF5 文件 (保存数据+元数据) ===
+                    if filename.endswith(".h5") or filename.endswith(".hdf5"):
+                        # 1. 获取位移台绝对位置 (从界面显示的 Target/Current 读取)
+                        try:
+                            cur_x = float(self.stage_widget.target_x.text())
+                            cur_y = float(self.stage_widget.target_y.text())
+                        except:
+                            cur_x, cur_y = 0.0, 0.0
+
+                        # 2. 获取波长 (假设界面上有个 self.wavelength_spin 输入框，如果没有则用默认值)
+                        try:
+                            wavelength = float(self.wavelength_spin.value())
+                        except:
+                            wavelength = 633.0  # 默认波长 633 Å
+                        
+                        # 3. 写入 H5 文件
+                        with h5py.File(path, 'w') as f:
+                            # 创建数据组
+                            entry = f.create_group("entry")
+                            data_grp = entry.create_group("data")
                             
-                    # 保存
-                    img_pil = Image.fromarray(roi_img)
-                    img_pil.save(path)
-                    self.log_success(f"Saved ROI: {filename} ({roi_img.shape})")
+                            # 保存图像数据
+                            data_grp.create_dataset("data", data=roi_img, compression="gzip")
+                            
+                            # 保存元数据
+                            # (1) 波长
+                            beam = entry.create_group("beam")
+                            beam.create_dataset("incident_wavelength", data=wavelength)
+                            
+                            # (2) 绝对位置
+                            position = entry.create_group("position")
+                            position.create_dataset("x_position", data=cur_x)
+                            position.create_dataset("y_position", data=cur_y)
+                            
+                            # (3) 其他信息
+                            f.create_dataset("timestamp", data=time.strftime('%Y-%m-%d %H:%M:%S'))
+                        
+                        self.log_success(f"已保存 H5 数据: {filename} (Pos: {cur_x:.3f}, {cur_y:.3f})")
+
+                    # === 分支 B: 如果是普通图片 (PNG/JPG) ===
+                    else:
+                        # 此时只能保存图片，无法保存元数据
+                        img_pil = Image.fromarray(roi_img)
+                        img_pil.save(path)
+                        self.log_success(f"已保存图像: {filename}")
                     
             except Exception as e:
-                self.log_error(f"保存当前帧失败: {e}")
+                self.log_error(f"保存失败: {e}")
                 import traceback
                 traceback.print_exc()
 
