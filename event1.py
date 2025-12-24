@@ -790,12 +790,12 @@ class LogicWindow(ModernUI):
                 QMessageBox.StandardButton.No
             )
             
-        if reply == QMessageBox.StandardButton.Yes:
+            if reply == QMessageBox.StandardButton.Yes:
                 # 假设 Yes 意味着 "我要去改"，则返回 False 阻止采集
                 return False
-        else:
-            # No 意味着取消操作
-            return False
+            else:
+                # No 意味着取消操作
+                return False
         
         # 3. 更新并确保目录存在
         self.save_dir = current_dir
