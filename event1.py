@@ -9,7 +9,7 @@ import traceback
 import h5py
 
 # PyQt6 导入
-from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QVBoxLayout, QFileDialog, QMessageBox
+from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QVBoxLayout, QFileDialog, QMessageBox, QInputDialog
 from PyQt6.QtGui import QImage, QPixmap, QPen, QColor
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QThread
 
